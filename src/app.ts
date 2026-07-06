@@ -5,6 +5,7 @@ import { factRoutes } from "./routes/facts.js";
 import { decisionRoutes } from "./routes/decisions.js";
 import { taskRoutes } from "./routes/tasks.js";
 import { challengeRoutes } from "./routes/challenges.js";
+import { milestoneRoutes } from "./routes/milestones.js";
 import { authenticate } from "./middleware/auth.js";
 import type { AppEnv } from "./types.js";
 
@@ -20,5 +21,6 @@ app.route("/", factRoutes);
 app.route("/", decisionRoutes);
 app.route("/", taskRoutes);
 app.route("/", challengeRoutes);
+app.route("/", milestoneRoutes);
 
 export type App = typeof app;
