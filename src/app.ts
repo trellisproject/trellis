@@ -3,6 +3,7 @@ import { projectRoutes } from "./routes/projects.js";
 import { specRoutes } from "./routes/specs.js";
 import { factRoutes } from "./routes/facts.js";
 import { decisionRoutes } from "./routes/decisions.js";
+import { taskRoutes } from "./routes/tasks.js";
 import { authenticate } from "./middleware/auth.js";
 import type { AppEnv } from "./types.js";
 
@@ -16,5 +17,6 @@ app.route("/", projectRoutes);
 app.route("/", specRoutes);
 app.route("/", factRoutes);
 app.route("/", decisionRoutes);
+app.route("/", taskRoutes);
 
 export type App = typeof app;
