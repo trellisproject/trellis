@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: trellis-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: trellis
+      POSTGRES_PASSWORD: trellis
+      POSTGRES_DB: trellis
+    ports:
+      # Host 5440 (5432-5435 are commonly taken by other local Postgres, e.g. Superkey).
+      - "5440:5432"
+    volumes:
+      - trellis_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trellis -d trellis"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  trellis_pgdata:
