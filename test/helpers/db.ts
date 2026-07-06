@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../../src/db/index.js";
-import { projects, principals, memberships } from "../../src/db/schema.js";
+import { projects, principals, memberships, delegations } from "../../src/db/schema.js";
 
 // Truncate every table between tests for isolation.
 export async function resetDb(): Promise<void> {
@@ -23,4 +23,30 @@ export async function makeProject(name = "test"): Promise<{ projectId: string; o
     .insert(memberships)
     .values({ projectId: project.id, principalId: operator.id, role: "operator" });
   return { projectId: project.id, operatorId: operator.id };
+}
+
+export async function addMember(
+  projectId: string,
+  kind: "human" | "agent",
+  role: "operator" | "member",
+  name = kind,
+): Promise<string> {
+  const p = (await db.insert(principals).values({ kind, displayName: name }).returning())[0]!;
+  await db.insert(memberships).values({ projectId, principalId: p.id, role });
+  return p.id;
+}
+
+export async function grantDelegation(
+  projectId: string,
+  agentPrincipalId: string,
+  grantedById: string,
+  decisionClasses: string[],
+): Promise<string> {
+  const d = (
+    await db
+      .insert(delegations)
+      .values({ projectId, agentPrincipalId, grantedById, policy: "test", decisionClasses })
+      .returning()
+  )[0]!;
+  return d.id;
 }
