@@ -4,8 +4,10 @@ import { and, asc, eq } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { assertions, specs } from "../db/schema.js";
 import { ingestSpec } from "../lib/ingest.js";
+import { requireMember } from "../middleware/auth.js";
+import type { AppEnv } from "../types.js";
 
-export const specRoutes = new Hono();
+export const specRoutes = new Hono<AppEnv>();
 
 const ingestBody = z.object({
   slug: z.string().min(1),
@@ -15,6 +17,8 @@ const ingestBody = z.object({
 
 // POST /projects/:pid/specs/ingest — markdown in, parse report out (TRL-API-009).
 specRoutes.post("/projects/:pid/specs/ingest", async (c) => {
+  const m = await requireMember(c);
+  if (m instanceof Response) return m;
   const pid = c.req.param("pid");
   const parsed = ingestBody.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) {
@@ -26,6 +30,8 @@ specRoutes.post("/projects/:pid/specs/ingest", async (c) => {
 
 // GET /projects/:pid/specs
 specRoutes.get("/projects/:pid/specs", async (c) => {
+  const m = await requireMember(c);
+  if (m instanceof Response) return m;
   const pid = c.req.param("pid");
   const rows = await db.select().from(specs).where(eq(specs.projectId, pid));
   return c.json({ specs: rows });
@@ -33,6 +39,8 @@ specRoutes.get("/projects/:pid/specs", async (c) => {
 
 // GET /projects/:pid/specs/:slug — merged view: statements + live status.
 specRoutes.get("/projects/:pid/specs/:slug", async (c) => {
+  const m = await requireMember(c);
+  if (m instanceof Response) return m;
   const pid = c.req.param("pid");
   const slug = c.req.param("slug");
   const spec = (

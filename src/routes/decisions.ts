@@ -4,8 +4,10 @@ import { and, desc, eq } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { decisions } from "../db/schema.js";
 import { resolveDrift, triageDrift } from "../lib/drift-resolve.js";
+import { requireMember, requireProjectMember } from "../middleware/auth.js";
+import type { AppEnv } from "../types.js";
 
-export const decisionRoutes = new Hono();
+export const decisionRoutes = new Hono<AppEnv>();
 
 const ERR_STATUS: Record<string, number> = {
   INVALID_CHOICE: 422,
@@ -21,7 +23,6 @@ const ERR_STATUS: Record<string, number> = {
 };
 
 const resolveBody = z.object({
-  actor: z.string().min(1),
   choice: z.enum(["fix", "amend", "accept"]),
   rationale: z.string().min(1),
   alternatives: z.array(z.string()).optional(),
@@ -30,6 +31,8 @@ const resolveBody = z.object({
 
 // POST /drifts/:did/resolve (TRL-CORE-011, TRL-CORE-018, TRL-API-004)
 decisionRoutes.post("/projects/:pid/drifts/:did/resolve", async (c) => {
+  const m = await requireMember(c);
+  if (m instanceof Response) return m;
   const pid = c.req.param("pid");
   const did = c.req.param("did");
   const parsed = resolveBody.safeParse(await c.req.json().catch(() => null));
@@ -38,7 +41,7 @@ decisionRoutes.post("/projects/:pid/drifts/:did/resolve", async (c) => {
   }
   const b = parsed.data;
   const result = await resolveDrift(pid, did, {
-    actorId: b.actor,
+    actorId: m.principalId,
     choice: b.choice,
     rationale: b.rationale,
     alternatives: b.alternatives,
@@ -52,6 +55,8 @@ decisionRoutes.post("/projects/:pid/drifts/:did/resolve", async (c) => {
 
 // POST /projects/:pid/drifts/:did/triage
 decisionRoutes.post("/projects/:pid/drifts/:did/triage", async (c) => {
+  const m = await requireMember(c);
+  if (m instanceof Response) return m;
   const pid = c.req.param("pid");
   const did = c.req.param("did");
   const result = await triageDrift(pid, did);
@@ -63,6 +68,8 @@ decisionRoutes.post("/projects/:pid/drifts/:did/triage", async (c) => {
 
 // GET /projects/:pid/decisions?on=<id> — the decision chain for an object.
 decisionRoutes.get("/projects/:pid/decisions", async (c) => {
+  const m = await requireMember(c);
+  if (m instanceof Response) return m;
   const pid = c.req.param("pid");
   const on = c.req.query("on");
   const conds = [eq(decisions.projectId, pid)];
@@ -80,5 +87,7 @@ decisionRoutes.get("/decisions/:did", async (c) => {
   const did = c.req.param("did");
   const row = (await db.select().from(decisions).where(eq(decisions.id, did)))[0];
   if (!row) return c.json({ error: "Decision not found", code: "NOT_FOUND" }, 404);
+  const gate = await requireProjectMember(c, row.projectId);
+  if (gate instanceof Response) return gate;
   return c.json({ decision: row });
 });

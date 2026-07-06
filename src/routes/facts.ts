@@ -5,8 +5,10 @@ import { db } from "../db/index.js";
 import { drifts, driftContradictingFacts, facts } from "../db/schema.js";
 import { writeFact } from "../lib/facts.js";
 import { checkerQueue, triageQueue } from "../lib/queues.js";
+import { requireMember, requireProjectMember } from "../middleware/auth.js";
+import type { AppEnv } from "../types.js";
 
-export const factRoutes = new Hono();
+export const factRoutes = new Hono<AppEnv>();
 
 const evidence = z.object({
   type: z.enum(["commit", "file", "test", "url"]),
@@ -14,7 +16,6 @@ const evidence = z.object({
 });
 
 const factBody = z.object({
-  observer: z.string().min(1),
   key: z.string().min(1),
   value: z.unknown(),
   statement: z.string().min(1),
@@ -35,6 +36,8 @@ const ERR_STATUS: Record<string, number> = {
 
 // POST /projects/:pid/facts (TRL-CORE-007, TRL-CORE-010)
 factRoutes.post("/projects/:pid/facts", async (c) => {
+  const m = await requireMember(c);
+  if (m instanceof Response) return m;
   const pid = c.req.param("pid");
   const parsed = factBody.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) {
@@ -42,7 +45,7 @@ factRoutes.post("/projects/:pid/facts", async (c) => {
   }
   const b = parsed.data;
   const result = await writeFact(pid, {
-    observerId: b.observer,
+    observerId: m.principalId,
     key: b.key,
     value: b.value,
     statement: b.statement,
@@ -60,6 +63,8 @@ factRoutes.post("/projects/:pid/facts", async (c) => {
 
 // GET /projects/:pid/facts?key=&observer=
 factRoutes.get("/projects/:pid/facts", async (c) => {
+  const m = await requireMember(c);
+  if (m instanceof Response) return m;
   const pid = c.req.param("pid");
   const key = c.req.query("key");
   const observer = c.req.query("observer");
@@ -77,6 +82,8 @@ factRoutes.get("/projects/:pid/facts", async (c) => {
 
 // GET /projects/:pid/drifts?status=&kind=
 factRoutes.get("/projects/:pid/drifts", async (c) => {
+  const m = await requireMember(c);
+  if (m instanceof Response) return m;
   const pid = c.req.param("pid");
   const status = c.req.query("status");
   const kind = c.req.query("kind");
@@ -96,6 +103,8 @@ factRoutes.get("/drifts/:did", async (c) => {
   const did = c.req.param("did");
   const drift = (await db.select().from(drifts).where(eq(drifts.id, did)))[0];
   if (!drift) return c.json({ error: "Drift not found", code: "NOT_FOUND" }, 404);
+  const gate = await requireProjectMember(c, drift.projectId);
+  if (gate instanceof Response) return gate;
   const factRows = await db
     .select({ factId: driftContradictingFacts.factId })
     .from(driftContradictingFacts)
@@ -105,6 +114,8 @@ factRoutes.get("/drifts/:did", async (c) => {
 
 // GET /projects/:pid/queue/checker?stale_days=N (TRL-CORE-009)
 factRoutes.get("/projects/:pid/queue/checker", async (c) => {
+  const m = await requireMember(c);
+  if (m instanceof Response) return m;
   const pid = c.req.param("pid");
   const staleDays = Number(c.req.query("stale_days") ?? "7");
   const rows = await checkerQueue(pid, Number.isFinite(staleDays) ? staleDays : 7);
@@ -113,6 +124,8 @@ factRoutes.get("/projects/:pid/queue/checker", async (c) => {
 
 // GET /projects/:pid/queue/triage
 factRoutes.get("/projects/:pid/queue/triage", async (c) => {
+  const m = await requireMember(c);
+  if (m instanceof Response) return m;
   const pid = c.req.param("pid");
   return c.json(await triageQueue(pid));
 });

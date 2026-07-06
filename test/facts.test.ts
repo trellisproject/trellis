@@ -5,7 +5,7 @@ import { assertions, drifts, facts as factsTable } from "../src/db/schema.js";
 import { writeFact } from "../src/lib/facts.js";
 import { checkerQueue, triageQueue } from "../src/lib/queues.js";
 import { ingestSpec } from "../src/lib/ingest.js";
-import { resetDb, makeProject } from "./helpers/db.js";
+import { resetDb, makeProject, authFor } from "./helpers/db.js";
 
 const spec = (block: string) => `---\nspec: T-X\ntitle: T\n---\n${block}`;
 const A = (id: string, status: string) => `### ${id}: t\nstatus: ${status}\n\nstatement for ${id}\n`;
@@ -164,12 +164,12 @@ describe("work queues", () => {
 describe("facts route", () => {
   it("POST /facts returns 201 with the fact and any drifts", async () => {
     const { app } = await import("../src/app.js");
+    const auth = await authFor(projectId, operatorId);
     await seed(A("T-X-001", "agreed"));
     const res = await app.request(`/projects/${projectId}/facts`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...auth },
       body: JSON.stringify({
-        observer: operatorId,
         key: "k",
         value: false,
         statement: "contradiction",
@@ -180,16 +180,28 @@ describe("facts route", () => {
     expect(res.status).toBe(201);
     const body = (await res.json()) as any;
     expect(body.fact.id).toBeTruthy();
+    expect(body.fact.observerId).toBe(operatorId); // observer comes from the token
     expect(body.driftsCreated).toHaveLength(1);
   });
 
   it("POST /facts with empty evidence returns 422", async () => {
     const { app } = await import("../src/app.js");
+    const auth = await authFor(projectId, operatorId);
+    const res = await app.request(`/projects/${projectId}/facts`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...auth },
+      body: JSON.stringify({ key: "k", value: 1, statement: "s", evidence: [] }),
+    });
+    expect(res.status).toBe(422);
+  });
+
+  it("POST /facts without a token returns 401", async () => {
+    const { app } = await import("../src/app.js");
     const res = await app.request(`/projects/${projectId}/facts`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ observer: operatorId, key: "k", value: 1, statement: "s", evidence: [] }),
+      body: JSON.stringify({ key: "k", value: 1, statement: "s", evidence: [{ type: "commit", ref: "c" }] }),
     });
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(401);
   });
 });

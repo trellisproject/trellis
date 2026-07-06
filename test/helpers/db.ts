@@ -1,6 +1,14 @@
 import { sql } from "drizzle-orm";
 import { db } from "../../src/db/index.js";
-import { projects, principals, memberships, delegations } from "../../src/db/schema.js";
+import { projects, principals, memberships, delegations, agentTokens } from "../../src/db/schema.js";
+import { hashToken } from "../../src/lib/tokens.js";
+
+// Mint a token for a principal and return an Authorization header for it.
+export async function authFor(projectId: string, principalId: string): Promise<Record<string, string>> {
+  const raw = `trk_test_${principalId}`;
+  await db.insert(agentTokens).values({ projectId, principalId, tokenHash: hashToken(raw) });
+  return { Authorization: `Bearer ${raw}` };
+}
 
 // Truncate every table between tests for isolation.
 export async function resetDb(): Promise<void> {
