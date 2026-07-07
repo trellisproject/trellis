@@ -1,0 +1,32 @@
+# Scheduled logical backup of the production Trellis DB.
+# Neon PITR is OFF, so this is the only safety net for facts, decisions, drift,
+# efforts, requests, challenges, and tasks — everything that lives only in the DB.
+# Runs every 6h (and on demand); keeps 90 days of gzipped pg_dump artifacts.
+# Restore: gunzip < dump.sql.gz | psql "$FRESH_DATABASE_URL"
+name: backup
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    container: postgres:17 # pg_dump 17 to match the Neon server version
+    steps:
+      - name: pg_dump → gzip
+        env:
+          PGCONN: ${{ secrets.DATABASE_URL_UNPOOLED }}
+        run: |
+          set -euo pipefail
+          test -n "$PGCONN" || { echo "DATABASE_URL_UNPOOLED secret is empty"; exit 1; }
+          ts=$(date -u +%Y%m%dT%H%M%SZ)
+          out="trellis-${ts}.sql.gz"
+          pg_dump "$PGCONN" --no-owner --no-privileges | gzip -9 > "$out"
+          echo "wrote $out ($(du -h "$out" | cut -f1))"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: trellis-db-backup-${{ github.run_id }}
+          path: "*.sql.gz"
+          retention-days: 90
