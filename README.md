@@ -6,15 +6,17 @@ Product design, primitives, and the spec live in the [playbook](https://github.c
 
 ## Status
 
-Phase 1 (server), early. Implemented so far:
+Phase 1 (server): route surface complete, 84 tests green. Implemented:
 
-- Full database schema for all primitives (projects, principals, memberships, tokens, delegations, specs, assertions, facts, drift, tasks, decisions, challenges, milestones).
-- Spec-format parser (`src/lib/spec-parse.ts`) — the markdown assertion format from the playbook.
-- Spec ingestion (`src/lib/ingest.ts`) — atomic parse report, immutable ids, retire-on-absence, commit-idempotent (TRL-API-009, TRL-API-014, TRL-CORE-021).
-- Routes: project create/list/get with first operator, spec ingest + read.
-- Tests: 16 across parser (unit), ingestion (integration), and routes (integration) — see Testing.
+- Full database schema for all primitives.
+- Spec-format parser + ingestion — atomic parse report, immutable ids, retire-on-absence, commit-idempotent (TRL-API-009/014, TRL-CORE-021).
+- Auth: bearer-token middleware, principal-from-token, member/operator/delegation gates, bootstrap token on project create.
+- Facts with mandatory provenance + automatic drift filing; checker + triage work queues.
+- Drift resolution (fix/amend/accept) with decisions + status restoration; challenges (file + uphold/supersede); contradiction drift between two assertions.
+- Tasks (claim/checkpoint/handoff, optimistic concurrency); milestones with computed progress + decision-gated scope/date changes.
+- GitHub webhook (signed) — merged PR trailers land facts + agreed→implemented.
 
-Not yet built: auth middleware, facts/drift/tasks/decisions/challenges/milestones routes, the two work-queue queries, GitHub webhook.
+Not yet built: human session auth (OAuth/magic link — humans use bearer tokens for now); Neon provisioning; Vercel deploy; CLI + MCP adapters; UI.
 
 ## Stack
 
