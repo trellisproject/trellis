@@ -61,7 +61,7 @@ export type Priority = "now" | "normal" | "later";
 export type WorklistItem = { bucket: string; kind: "drift" | "challenge" | "request" | "assertion"; id: string; ref: string; title: string; priority: Priority; action: string };
 export type Worklist = { buckets: Record<string, WorklistItem[]>; counts: Record<string, number> };
 export type Decision = { id: string; onType: string; onId: string; choice: string; rationale: string; at: string };
-export type Fact = { id: string; key: string; statement: string; observerId: string; evidence: { type: string; ref: string }[]; observedAt: string };
+export type Fact = { id: string; key: string; statement: string; observerId: string; evidence: { type: string; ref: string }[]; observedAt: string; metricKey: string | null; measuredValue: number | null };
 export type Task = { id: string; title: string; status: string; ownerId: string | null };
 export type Request = {
   id: string; title: string; body: string; requester: string; source: string | null;

@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { drifts, driftContradictingFacts, facts } from "../db/schema.js";
 import { writeFact } from "../lib/facts.js";
@@ -67,21 +67,27 @@ factRoutes.post("/projects/:pid/facts", async (c) => {
 });
 
 // GET /projects/:pid/facts?key=&observer=
+// kind: observation (default, discrete facts) | measurement (metric series) | all.
+// Measurements are high-frequency and belong on their assertion as a trend, so
+// the default feed shows observations only.
 factRoutes.get("/projects/:pid/facts", async (c) => {
   const m = await requireMember(c);
   if (m instanceof Response) return m;
   const pid = c.req.param("pid");
   const key = c.req.query("key");
   const observer = c.req.query("observer");
+  const kind = c.req.query("kind") ?? "observation";
   const conds = [eq(facts.projectId, pid)];
   if (key) conds.push(eq(facts.key, key));
   if (observer) conds.push(eq(facts.observerId, observer));
+  if (kind === "observation") conds.push(isNull(facts.metricKey));
+  else if (kind === "measurement") conds.push(isNotNull(facts.metricKey));
   const rows = await db
     .select()
     .from(facts)
     .where(and(...conds))
     .orderBy(desc(facts.observedAt))
-    .limit(50);
+    .limit(100);
   return c.json({ facts: rows });
 });
 
