@@ -1,5 +1,8 @@
 import { Hono } from "hono";
 import { z } from "zod";
+import { and, eq } from "drizzle-orm";
+import { db } from "../db/index.js";
+import { requests } from "../db/schema.js";
 import { createRequest, decideRequest, getRequest, linkRequestAssertions, listRequests } from "../lib/requests.js";
 import { requireMember } from "../middleware/auth.js";
 import type { AppEnv } from "../types.js";
@@ -17,10 +20,21 @@ const st = (code: string) => (ERR[code] ?? 400) as 400;
 requestRoutes.post("/projects/:pid/requests", async (c) => {
   const m = await requireMember(c);
   if (m instanceof Response) return m;
-  const b = z.object({ title: z.string().min(1), body: z.string().optional(), requester: z.string().min(1), source: z.string().nullable().optional() }).safeParse(await c.req.json().catch(() => null));
+  const b = z.object({ title: z.string().min(1), body: z.string().optional(), requester: z.string().min(1), source: z.string().nullable().optional(), priority: z.enum(["now", "normal", "later"]).optional() }).safeParse(await c.req.json().catch(() => null));
   if (!b.success) return c.json({ error: "Invalid body", code: "INVALID_INPUT", issues: b.error.issues }, 422);
   const req = await createRequest(c.req.param("pid"), b.data);
   return c.json({ request: req }, 201);
+});
+
+// PATCH /projects/:pid/requests/:rid — set priority.
+requestRoutes.patch("/projects/:pid/requests/:rid", async (c) => {
+  const m = await requireMember(c);
+  if (m instanceof Response) return m;
+  const b = z.object({ priority: z.enum(["now", "normal", "later"]) }).safeParse(await c.req.json().catch(() => null));
+  if (!b.success) return c.json({ error: "Invalid body", code: "INVALID_INPUT" }, 422);
+  const updated = (await db.update(requests).set({ priority: b.data.priority, updatedAt: new Date() }).where(and(eq(requests.id, c.req.param("rid")), eq(requests.projectId, c.req.param("pid")))).returning())[0];
+  if (!updated) return c.json({ error: "Request not found", code: "NOT_FOUND" }, 404);
+  return c.json({ request: updated });
 });
 
 // GET /projects/:pid/requests?status=

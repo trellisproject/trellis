@@ -104,6 +104,7 @@ taskRoutes.patch("/projects/:pid/tasks/:tid", async (c) => {
     .object({
       status: z.enum(["open", "claimed", "in_progress", "done", "blocked"]).optional(),
       title: z.string().min(1).optional(),
+      priority: z.enum(["now", "normal", "later"]).optional(),
       version: z.number().int().optional(),
     })
     .safeParse(await c.req.json().catch(() => null));

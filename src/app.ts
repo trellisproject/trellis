@@ -9,6 +9,7 @@ import { challengeRoutes } from "./routes/challenges.js";
 import { milestoneRoutes } from "./routes/milestones.js";
 import { githubRoutes } from "./routes/github.js";
 import { requestRoutes } from "./routes/requests.js";
+import { worklistRoutes } from "./routes/worklist.js";
 import { authenticate } from "./middleware/auth.js";
 import type { AppEnv } from "./types.js";
 
@@ -29,5 +30,6 @@ app.route("/", challengeRoutes);
 app.route("/", milestoneRoutes);
 app.route("/", githubRoutes);
 app.route("/", requestRoutes);
+app.route("/", worklistRoutes);
 
 export type App = typeof app;

@@ -7,7 +7,7 @@ import { api } from "@/lib/api";
 import { getSession, clearSession } from "@/lib/store";
 
 const NAV = [
-  { seg: "triage", label: "Triage" },
+  { seg: "worklist", label: "Worklist" },
   { seg: "requests", label: "Requests" },
   { seg: "specs", label: "Specs" },
   { seg: "roadmap", label: "Roadmap" },
@@ -31,8 +31,8 @@ export default function ProjectLayout({ children, params }: { children: ReactNod
     }
     api.get<{ project: { name: string } }>(`/projects/${pid}`).then((d) => setName(d.project.name)).catch(() => router.push("/"));
     api
-      .get<{ drifts: unknown[]; challenges: unknown[] }>(`/projects/${pid}/queue/triage`)
-      .then((d) => setTriageCount(d.drifts.length + d.challenges.length))
+      .get<{ counts: { decide: number } }>(`/projects/${pid}/worklist`)
+      .then((d) => setTriageCount(d.counts.decide))
       .catch(() => {});
   }, [pid, router]);
 
@@ -46,7 +46,7 @@ export default function ProjectLayout({ children, params }: { children: ReactNod
             return (
               <Link key={n.seg} href={`/p/${pid}/${n.seg}`} className={active ? "active" : ""}>
                 {n.label}
-                {n.seg === "triage" && triageCount != null && triageCount > 0 && (
+                {n.seg === "worklist" && triageCount != null && triageCount > 0 && (
                   <span className="count alert">{triageCount}</span>
                 )}
               </Link>

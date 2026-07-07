@@ -56,6 +56,16 @@ GET /charges paginates with a default page size of 50 and a cursor.
 status: agreed
 
 Card numbers and CVCs never appear in application logs.
+
+### PAY-API-007: Disputes are ingested from the processor webhook
+status: proposed
+
+Chargeback and dispute events are ingested and surfaced within one minute.
+
+### PAY-API-008: Settlement reports reconcile to the ledger
+status: agreed
+
+Daily settlement totals match the internal ledger to the cent.
 `;
 
 function pr(secret: string, title: string, trailer: string, sha: string, n: number) {
@@ -101,7 +111,10 @@ async function main() {
   const reqA = await api("POST", `/projects/${pid}/requests`, { token: tok, body: { title: "Idempotent charges so retries don't double-bill", requester: "customer: Northwind", source: "email" } });
   await api("POST", `/projects/${pid}/requests/${reqA.request.id}/decide`, { token: tok, body: { choice: "accept", rationale: "Core reliability need — clear scope" } });
   await api("POST", `/projects/${pid}/requests/${reqA.request.id}/assertions`, { token: tok, body: { assertions: ["PAY-API-001"] } });
-  await api("POST", `/projects/${pid}/requests`, { token: tok, body: { title: "Partial refunds by line item", requester: "customer: Contoso", source: "sales call" } });
+  await api("POST", `/projects/${pid}/requests`, { token: tok, body: { title: "Partial refunds by line item", requester: "customer: Contoso", source: "sales call", priority: "now" } });
+  // accepted but not yet specified -> shows in the Specify bucket
+  const reqC = await api("POST", `/projects/${pid}/requests`, { token: tok, body: { title: "Multi-currency settlement", requester: "customer: Globex", source: "email" } });
+  await api("POST", `/projects/${pid}/requests/${reqC.request.id}/decide`, { token: tok, body: { choice: "accept", rationale: "Strategic — several customers asked" } });
 
   console.log(JSON.stringify({ url: BASE, project: pid, token: tok }, null, 2));
 }

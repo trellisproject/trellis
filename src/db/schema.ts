@@ -240,6 +240,7 @@ export const drifts = pgTable(
     // second assertion for kind='contradiction' (TRL-CORE-025)
     assertionBId: text("assertion_b_id").references(() => assertions.id),
     status: text("status").$type<"detected" | "triaged" | "resolved">().notNull().default("detected"),
+    priority: text("priority").$type<"now" | "normal" | "later">().notNull().default("normal"),
     summary: text("summary").notNull(),
     resolutionDecisionId: text("resolution_decision_id"),
     version: integer("version").notNull().default(1),
@@ -273,6 +274,7 @@ export const tasks = pgTable(
       .$type<"open" | "claimed" | "in_progress" | "done" | "blocked">()
       .notNull()
       .default("open"),
+    priority: text("priority").$type<"now" | "normal" | "later">().notNull().default("normal"),
     ownerId: text("owner_id").references(() => principals.id),
     driftId: text("drift_id").references(() => drifts.id),
     version: integer("version").notNull().default(1),
@@ -390,6 +392,7 @@ export const requests = pgTable("requests", {
   requester: text("requester").notNull(), // who asked — "customer: Acme", a name, etc.
   source: text("source"), // email | slack | meeting | customer | ...
   status: text("status").$type<"new" | "accepted" | "declined">().notNull().default("new"),
+  priority: text("priority").$type<"now" | "normal" | "later">().notNull().default("normal"),
   decisionId: text("decision_id"), // the accept/decline decision
   createdAt: createdAt(),
   updatedAt: updatedAt(),

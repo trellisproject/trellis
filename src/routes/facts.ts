@@ -116,6 +116,17 @@ factRoutes.get("/projects/:pid/drifts", async (c) => {
   return c.json({ drifts: rows });
 });
 
+// PATCH /projects/:pid/drifts/:did — set priority (not a decision; any member).
+factRoutes.patch("/projects/:pid/drifts/:did", async (c) => {
+  const m = await requireMember(c);
+  if (m instanceof Response) return m;
+  const b = z.object({ priority: z.enum(["now", "normal", "later"]) }).safeParse(await c.req.json().catch(() => null));
+  if (!b.success) return c.json({ error: "Invalid body", code: "INVALID_INPUT" }, 422);
+  const updated = (await db.update(drifts).set({ priority: b.data.priority, updatedAt: new Date() }).where(and(eq(drifts.id, c.req.param("did")), eq(drifts.projectId, c.req.param("pid")))).returning())[0];
+  if (!updated) return c.json({ error: "Drift not found", code: "NOT_FOUND" }, 404);
+  return c.json({ drift: updated });
+});
+
 // GET /drifts/:did
 factRoutes.get("/drifts/:did", async (c) => {
   const did = c.req.param("did");

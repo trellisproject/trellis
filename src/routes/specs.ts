@@ -5,8 +5,14 @@ import { db } from "../db/index.js";
 import { assertions, specs } from "../db/schema.js";
 import { ingestSpec } from "../lib/ingest.js";
 import { getAssertionDetail } from "../lib/assertion-detail.js";
+import { agreeAssertion, retireAssertion } from "../lib/assertion-transition.js";
 import { requireMember } from "../middleware/auth.js";
 import type { AppEnv } from "../types.js";
+
+const TRANSITION_ERR: Record<string, number> = {
+  MISSING_RATIONALE: 422, NOT_FOUND: 404, INVALID_STATE: 409,
+  NOT_MEMBER: 403, NOT_OPERATOR: 403, DELEGATION_REQUIRED: 403, INVALID_DELEGATION: 403, DELEGATION_SCOPE: 403,
+};
 
 export const specRoutes = new Hono<AppEnv>();
 
@@ -46,6 +52,30 @@ specRoutes.get("/projects/:pid/assertions/:humanId", async (c) => {
   const detail = await getAssertionDetail(c.req.param("pid"), c.req.param("humanId"));
   if (!detail) return c.json({ error: "Assertion not found", code: "NOT_FOUND" }, 404);
   return c.json(detail);
+});
+
+const transitionBody = z.object({ rationale: z.string().min(1), delegated_by: z.string().nullable().optional() });
+
+// POST /projects/:pid/assertions/:humanId/agree — proposed -> agreed (a decision).
+specRoutes.post("/projects/:pid/assertions/:humanId/agree", async (c) => {
+  const m = await requireMember(c);
+  if (m instanceof Response) return m;
+  const b = transitionBody.safeParse(await c.req.json().catch(() => null));
+  if (!b.success) return c.json({ error: "Invalid body", code: "INVALID_INPUT" }, 422);
+  const r = await agreeAssertion(c.req.param("pid"), c.req.param("humanId"), { actorId: m.principalId, rationale: b.data.rationale, delegatedById: b.data.delegated_by ?? null });
+  if (!r.ok) return c.json({ error: r.error, code: r.code }, (TRANSITION_ERR[r.code] ?? 400) as 400);
+  return c.json(r);
+});
+
+// POST /projects/:pid/assertions/:humanId/retire — retire a live assertion (a decision).
+specRoutes.post("/projects/:pid/assertions/:humanId/retire", async (c) => {
+  const m = await requireMember(c);
+  if (m instanceof Response) return m;
+  const b = transitionBody.safeParse(await c.req.json().catch(() => null));
+  if (!b.success) return c.json({ error: "Invalid body", code: "INVALID_INPUT" }, 422);
+  const r = await retireAssertion(c.req.param("pid"), c.req.param("humanId"), { actorId: m.principalId, rationale: b.data.rationale, delegatedById: b.data.delegated_by ?? null });
+  if (!r.ok) return c.json({ error: r.error, code: r.code }, (TRANSITION_ERR[r.code] ?? 400) as 400);
+  return c.json(r);
 });
 
 // GET /projects/:pid/specs/:slug — merged view: statements + live status.

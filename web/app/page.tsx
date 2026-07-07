@@ -30,7 +30,7 @@ export default function Connect() {
       const data = (await res.json()) as { projects: Project[] };
       setSession({ apiUrl, token });
       setProjects(data.projects);
-      if (data.projects.length === 1) router.push(`/p/${data.projects[0]!.id}/triage`);
+      if (data.projects.length === 1) router.push(`/p/${data.projects[0]!.id}/worklist`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to connect");
     } finally {

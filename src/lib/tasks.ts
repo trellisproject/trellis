@@ -124,7 +124,7 @@ export async function handoffTask(
 export async function updateTaskStatus(
   projectId: string,
   taskId: string,
-  input: { status?: TaskStatus; title?: string; version?: number },
+  input: { status?: TaskStatus; title?: string; priority?: "now" | "normal" | "later"; version?: number },
 ): Promise<Result<typeof tasks.$inferSelect>> {
   const task = (await db.select().from(tasks).where(eq(tasks.id, taskId)))[0];
   if (!task || task.projectId !== projectId) return { ok: false, code: "NOT_FOUND", error: "Task not found" };
@@ -138,6 +138,7 @@ export async function updateTaskStatus(
       .set({
         status: input.status ?? task.status,
         title: input.title ?? task.title,
+        priority: input.priority ?? task.priority,
         version: task.version + 1,
         updatedAt: new Date(),
       })

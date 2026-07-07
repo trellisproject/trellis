@@ -40,6 +40,9 @@ export type AssertionDetail = {
   decisions: Decision[];
 };
 export type TaskDetail = { task: Task; assertions: string[]; checkpoints: { id: string; note: string; at: string }[]; dependsOn: string[] };
+export type Priority = "now" | "normal" | "later";
+export type WorklistItem = { bucket: string; kind: "drift" | "challenge" | "request" | "assertion"; id: string; ref: string; title: string; priority: Priority; action: string };
+export type Worklist = { buckets: Record<string, WorklistItem[]>; counts: Record<string, number> };
 export type Decision = { id: string; onType: string; onId: string; choice: string; rationale: string; at: string };
 export type Fact = { id: string; key: string; statement: string; observerId: string; evidence: { type: string; ref: string }[]; observedAt: string };
 export type Task = { id: string; title: string; status: string; ownerId: string | null };
