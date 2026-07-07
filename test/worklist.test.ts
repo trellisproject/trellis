@@ -8,6 +8,7 @@ import { createRequest, decideRequest } from "../src/lib/requests.js";
 import { createTask } from "../src/lib/tasks.js";
 import { agreeAssertion, retireAssertion } from "../src/lib/assertion-transition.js";
 import { worklist } from "../src/lib/worklist.js";
+import { createEffort, changeEffort } from "../src/lib/efforts.js";
 import { resetDb, makeProject, addMember } from "./helpers/db.js";
 
 let projectId: string;
@@ -79,6 +80,23 @@ describe("worklist buckets", () => {
     expect((await worklist(projectId)).build.map((i) => i.ref)).toEqual(["T-X-001"]);
     await createTask(projectId, { title: "build it", assertions: ["T-X-001"] });
     expect((await worklist(projectId)).build).toEqual([]);
+  });
+
+  it("effort-scoping shows only the effort's assertion work, dropping inbox items", async () => {
+    // two agreed (build) assertions + a new request (inbox)
+    await ingestSpec(projectId, "s", `---\nspec: T-X\ntitle: T\n---\n### T-X-001: a\nstatus: agreed\n\nb\n### T-X-002: b\nstatus: agreed\n\nb\n`, "c1");
+    await createRequest(projectId, { title: "inbox ask", requester: "c" });
+    const e = await createEffort(projectId, { title: "Focus", status: "active" });
+    if (!e.ok) throw new Error(e.code);
+    await changeEffort(projectId, e.value.id, { addAssertions: ["T-X-001"], decision: { actorId: operatorId, rationale: "in scope" } });
+
+    const all = await worklist(projectId);
+    expect(all.build.map((i) => i.ref).sort()).toEqual(["T-X-001", "T-X-002"]); // both
+    expect(all.decide.length).toBe(1); // the new request
+
+    const scoped = await worklist(projectId, { effortId: e.value.id });
+    expect(scoped.build.map((i) => i.ref)).toEqual(["T-X-001"]); // only the effort's assertion
+    expect(scoped.decide.length).toBe(0); // inbox request dropped when scoped
   });
 
   it("orders a bucket by priority (now before normal before later)", async () => {

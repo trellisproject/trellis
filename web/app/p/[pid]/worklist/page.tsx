@@ -1,7 +1,7 @@
 "use client";
 import { Fragment, use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, type Worklist, type WorklistItem, type Priority } from "@/lib/api";
+import { api, type Worklist, type WorklistItem, type Priority, type Effort } from "@/lib/api";
 import { AssertionPickerModal } from "@/components/AssertionPickerModal";
 
 const BUCKETS: { key: string; label: string; blurb: string }[] = [
@@ -25,11 +25,17 @@ export default function WorklistPage({ params }: { params: Promise<{ pid: string
   const router = useRouter();
   const [wl, setWl] = useState<Worklist | null>(null);
   const [action, setAction] = useState<Action | null>(null);
+  const [efforts, setEfforts] = useState<Effort[]>([]);
+  const [scope, setScope] = useState<string>("all"); // "all" or an effort id
 
   async function load() {
-    setWl(await api.get<Worklist>(`/projects/${pid}/worklist`));
+    const q = scope === "all" ? "" : `?effort=${scope}`;
+    setWl(await api.get<Worklist>(`/projects/${pid}/worklist${q}`));
   }
-  useEffect(() => { load(); }, [pid]);
+  useEffect(() => { load(); }, [pid, scope]);
+  useEffect(() => {
+    api.get<{ efforts: Effort[] }>(`/projects/${pid}/efforts`).then((d) => setEfforts(d.efforts)).catch(() => {});
+  }, [pid]);
 
   function onAct(item: WorklistItem) {
     if (item.bucket === "decide" && item.kind === "drift") return setAction({ type: "resolve-drift", item });
@@ -54,7 +60,11 @@ export default function WorklistPage({ params }: { params: Promise<{ pid: string
     <>
       <div className="topbar">
         <h1>Worklist</h1>
-        <span className="sub">{total === 0 ? "All clear." : `${total} item${total === 1 ? "" : "s"} across the pipeline, highest priority first`}</span>
+        <span className="sub">{total === 0 ? "All clear." : `${total} item${total === 1 ? "" : "s"}, highest priority first`}</span>
+        <select className="mini-select" style={{ marginLeft: "auto" }} value={scope} onChange={(e) => setScope(e.target.value)}>
+          <option value="all">All work</option>
+          {efforts.map((e) => <option key={e.id} value={e.id}>{e.status === "active" ? "★ " : ""}{e.title}</option>)}
+        </select>
       </div>
       <div className="content">
         {!wl ? <div className="empty">Loading…</div> : BUCKETS.map((b) => {
