@@ -1,5 +1,6 @@
 "use client";
 import { use, useEffect, useState } from "react";
+import Link from "next/link";
 import { api, type Task } from "@/lib/api";
 
 export default function Tasks({ params }: { params: Promise<{ pid: string }> }) {
@@ -18,10 +19,10 @@ export default function Tasks({ params }: { params: Promise<{ pid: string }> }) 
         ) : (
           <div className="card">
             {tasks.map((t) => (
-              <div key={t.id} className="row between">
+              <Link key={t.id} href={`/p/${pid}/t/${t.id}`} className="row between" style={{ display: "flex" }}>
                 <span>{t.title}</span>
-                <span className="pill" style={{ textTransform: "capitalize" }}>{t.status.replace("_", " ")}</span>
-              </div>
+                <div className="flex"><span className="pill" style={{ textTransform: "capitalize" }}>{t.status.replace("_", " ")}</span><span className="mutedtext">→</span></div>
+              </Link>
             ))}
           </div>
         )}

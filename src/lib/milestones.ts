@@ -39,6 +39,32 @@ export async function progressFor(projectId: string): Promise<Map<string, Progre
   return new Map(rows.map((r) => [r.milestone_id, { verified: Number(r.verified), total: Number(r.total) }]));
 }
 
+// The assertions in each milestone (with live status), for the roadmap
+// breakdown so progress is self-explanatory.
+export async function assertionsByMilestone(
+  projectId: string,
+): Promise<Map<string, { humanId: string; title: string; status: string }[]>> {
+  const rows = await db
+    .select({
+      milestoneId: milestoneAssertions.milestoneId,
+      humanId: assertions.humanId,
+      title: assertions.title,
+      status: assertions.status,
+    })
+    .from(milestoneAssertions)
+    .innerJoin(milestones, eq(milestones.id, milestoneAssertions.milestoneId))
+    .innerJoin(assertions, eq(assertions.id, milestoneAssertions.assertionId))
+    .where(eq(milestones.projectId, projectId));
+  const map = new Map<string, { humanId: string; title: string; status: string }[]>();
+  for (const r of rows) {
+    const list = map.get(r.milestoneId) ?? [];
+    list.push({ humanId: r.humanId, title: r.title, status: r.status });
+    map.set(r.milestoneId, list);
+  }
+  for (const list of map.values()) list.sort((a, b) => a.humanId.localeCompare(b.humanId));
+  return map;
+}
+
 export async function createMilestone(
   projectId: string,
   input: { title: string; order?: number; targetDate?: string | null; assertions?: string[] },

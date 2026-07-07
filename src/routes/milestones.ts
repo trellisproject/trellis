@@ -3,7 +3,7 @@ import { z } from "zod";
 import { asc, eq } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { milestones } from "../db/schema.js";
-import { changeMilestone, createMilestone, progressFor } from "../lib/milestones.js";
+import { assertionsByMilestone, changeMilestone, createMilestone, progressFor } from "../lib/milestones.js";
 import { requireMember } from "../middleware/auth.js";
 import type { AppEnv } from "../types.js";
 
@@ -46,8 +46,13 @@ milestoneRoutes.get("/projects/:pid/milestones", async (c) => {
   const pid = c.req.param("pid");
   const rows = await db.select().from(milestones).where(eq(milestones.projectId, pid)).orderBy(asc(milestones.order));
   const progress = await progressFor(pid);
+  const byMilestone = await assertionsByMilestone(pid);
   return c.json({
-    milestones: rows.map((ms) => ({ ...ms, progress: progress.get(ms.id) ?? { verified: 0, total: 0 } })),
+    milestones: rows.map((ms) => ({
+      ...ms,
+      progress: progress.get(ms.id) ?? { verified: 0, total: 0 },
+      assertions: byMilestone.get(ms.id) ?? [],
+    })),
   });
 });
 

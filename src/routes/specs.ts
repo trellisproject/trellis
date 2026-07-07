@@ -4,6 +4,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { assertions, specs } from "../db/schema.js";
 import { ingestSpec } from "../lib/ingest.js";
+import { getAssertionDetail } from "../lib/assertion-detail.js";
 import { requireMember } from "../middleware/auth.js";
 import type { AppEnv } from "../types.js";
 
@@ -35,6 +36,16 @@ specRoutes.get("/projects/:pid/specs", async (c) => {
   const pid = c.req.param("pid");
   const rows = await db.select().from(specs).where(eq(specs.projectId, pid));
   return c.json({ specs: rows });
+});
+
+// GET /projects/:pid/assertions/:humanId — the hub: statement, status,
+// linked facts/drifts/tasks, and the decision chain (TRL-UI-004/010).
+specRoutes.get("/projects/:pid/assertions/:humanId", async (c) => {
+  const m = await requireMember(c);
+  if (m instanceof Response) return m;
+  const detail = await getAssertionDetail(c.req.param("pid"), c.req.param("humanId"));
+  if (!detail) return c.json({ error: "Assertion not found", code: "NOT_FOUND" }, 404);
+  return c.json(detail);
 });
 
 // GET /projects/:pid/specs/:slug — merged view: statements + live status.

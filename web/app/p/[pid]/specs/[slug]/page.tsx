@@ -1,5 +1,6 @@
 "use client";
 import { use, useEffect, useState } from "react";
+import Link from "next/link";
 import { api, type Assertion, type Spec } from "@/lib/api";
 import { Badge } from "@/components/Badge";
 
@@ -21,13 +22,13 @@ export default function SpecDetail({ params }: { params: Promise<{ pid: string; 
         {loading ? <div className="empty">Loading…</div> : (
           <div className="card">
             {assertions.map((a) => (
-              <div key={a.id} className="row" style={{ borderLeft: a.status === "drifted" ? "3px solid var(--red)" : "3px solid transparent" }}>
+              <Link key={a.id} href={`/p/${pid}/a/${a.humanId}`} className="row" style={{ display: "block", borderLeft: a.status === "drifted" ? "3px solid var(--red)" : "3px solid transparent" }}>
                 <div className="between">
                   <div className="flex"><span className="assertion-id">{a.humanId}</span><strong>{a.title}</strong></div>
-                  <Badge status={a.status} />
+                  <div className="flex"><Badge status={a.status} /><span className="mutedtext">→</span></div>
                 </div>
                 <div className="mutedtext" style={{ fontSize: 13, marginTop: 6 }}>{a.statement}</div>
-              </div>
+              </Link>
             ))}
           </div>
         )}
