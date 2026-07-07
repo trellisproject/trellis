@@ -2,6 +2,7 @@
 import { Fragment, use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, type Worklist, type WorklistItem, type Priority } from "@/lib/api";
+import { LinkAssertionsModal } from "@/components/LinkAssertionsModal";
 
 const BUCKETS: { key: string; label: string; blurb: string }[] = [
   { key: "decide", label: "Decide", blurb: "A judgment is owed — drifts, challenges, new requests" },
@@ -16,7 +17,8 @@ type Action =
   | { type: "resolve-challenge"; item: WorklistItem }
   | { type: "decide-request"; item: WorklistItem }
   | { type: "agree"; item: WorklistItem }
-  | { type: "create-task"; item: WorklistItem };
+  | { type: "create-task"; item: WorklistItem }
+  | { type: "link-assertions"; item: WorklistItem };
 
 export default function WorklistPage({ params }: { params: Promise<{ pid: string }> }) {
   const { pid } = use(params);
@@ -35,7 +37,7 @@ export default function WorklistPage({ params }: { params: Promise<{ pid: string
     if (item.bucket === "decide" && item.kind === "request") return setAction({ type: "decide-request", item });
     if (item.bucket === "agree") return setAction({ type: "agree", item });
     if (item.bucket === "build") return setAction({ type: "create-task", item });
-    if (item.bucket === "specify") return router.push(`/p/${pid}/requests`);
+    if (item.bucket === "specify") return setAction({ type: "link-assertions", item });
     if (item.bucket === "verify") return router.push(`/p/${pid}/a/${item.ref}`);
   }
 
@@ -87,7 +89,11 @@ export default function WorklistPage({ params }: { params: Promise<{ pid: string
         })}
         {wl && total === 0 && <div className="card"><div className="empty">Nothing needs action. Intent and reality agree, and everything agreed is built and verified. ✓</div></div>}
       </div>
-      {action && <ActionModal pid={pid} action={action} onClose={() => setAction(null)} onDone={() => { setAction(null); load(); }} />}
+      {action?.type === "link-assertions" ? (
+        <LinkAssertionsModal pid={pid} requestId={action.item.id} onClose={() => setAction(null)} onDone={() => { setAction(null); load(); }} />
+      ) : action ? (
+        <ActionModal pid={pid} action={action} onClose={() => setAction(null)} onDone={() => { setAction(null); load(); }} />
+      ) : null}
     </>
   );
 }
@@ -97,7 +103,9 @@ function PriorityDot({ p }: { p: Priority }) {
   return <span title={p} style={{ width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0, display: "inline-block" }} />;
 }
 
-const CONFIG: Record<Action["type"], { title: (i: WorklistItem) => string; choices: string[]; choiceKey: string; endpoint: (pid: string, i: WorklistItem) => string; needsTitle?: boolean }> = {
+type ModalAction = Exclude<Action, { type: "link-assertions" }>;
+
+const CONFIG: Record<ModalAction["type"], { title: (i: WorklistItem) => string; choices: string[]; choiceKey: string; endpoint: (pid: string, i: WorklistItem) => string; needsTitle?: boolean }> = {
   "resolve-drift": { title: (i) => `Resolve drift: ${i.title}`, choices: ["fix", "amend", "accept"], choiceKey: "choice", endpoint: (pid, i) => `/projects/${pid}/drifts/${i.id}/resolve` },
   "resolve-challenge": { title: (i) => `Resolve challenge`, choices: ["uphold", "supersede"], choiceKey: "choice", endpoint: (pid, i) => `/projects/${pid}/challenges/${i.id}/resolve` },
   "decide-request": { title: (i) => `Decide: ${i.title}`, choices: ["accept", "decline"], choiceKey: "choice", endpoint: (pid, i) => `/projects/${pid}/requests/${i.id}/decide` },
@@ -105,7 +113,7 @@ const CONFIG: Record<Action["type"], { title: (i: WorklistItem) => string; choic
   "create-task": { title: (i) => `Create a build task for ${i.ref}`, choices: [], choiceKey: "choice", endpoint: (pid, i) => `/projects/${pid}/tasks`, needsTitle: true },
 };
 
-function ActionModal({ pid, action, onClose, onDone }: { pid: string; action: Action; onClose: () => void; onDone: () => void }) {
+function ActionModal({ pid, action, onClose, onDone }: { pid: string; action: ModalAction; onClose: () => void; onDone: () => void }) {
   const cfg = CONFIG[action.type];
   const [choice, setChoice] = useState(cfg.choices[0] ?? "");
   const [rationale, setRationale] = useState("");

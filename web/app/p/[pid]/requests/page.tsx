@@ -3,6 +3,7 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { api, type Request } from "@/lib/api";
 import { Badge } from "@/components/Badge";
+import { LinkAssertionsModal } from "@/components/LinkAssertionsModal";
 
 export default function Requests({ params }: { params: Promise<{ pid: string }> }) {
   const { pid } = use(params);
@@ -10,6 +11,7 @@ export default function Requests({ params }: { params: Promise<{ pid: string }> 
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [decide, setDecide] = useState<Request | null>(null);
+  const [linking, setLinking] = useState<Request | null>(null);
 
   async function load() {
     const d = await api.get<{ requests: Request[] }>(`/projects/${pid}/requests`);
@@ -44,7 +46,10 @@ export default function Requests({ params }: { params: Promise<{ pid: string }> 
                   <div className="mutedtext" style={{ fontSize: 13 }}>{r.requester}{r.source ? ` · via ${r.source}` : ""}</div>
                   {r.body && <div className="mutedtext" style={{ fontSize: 13 }}>{r.body}</div>}
                 </div>
-                {r.status === "new" && <button className="btn" onClick={() => setDecide(r)}>Accept / Decline</button>}
+                <div className="flex">
+                  {r.status === "new" && <button className="btn" onClick={() => setDecide(r)}>Accept / Decline</button>}
+                  {r.status === "accepted" && !r.shipped && <button className="btn ghost" onClick={() => setLinking(r)}>Link assertions</button>}
+                </div>
               </div>
             </div>
             {r.derived.length > 0 && (
@@ -63,6 +68,7 @@ export default function Requests({ params }: { params: Promise<{ pid: string }> 
       </div>
       {creating && <CreateModal pid={pid} onClose={() => setCreating(false)} onDone={() => { setCreating(false); setLoading(true); load(); }} />}
       {decide && <DecideModal pid={pid} req={decide} onClose={() => setDecide(null)} onDone={() => { setDecide(null); setLoading(true); load(); }} />}
+      {linking && <LinkAssertionsModal pid={pid} requestId={linking.id} onClose={() => setLinking(null)} onDone={() => { setLinking(null); setLoading(true); load(); }} />}
     </>
   );
 }
