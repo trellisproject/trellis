@@ -1,0 +1,9 @@
+{
+  "name": "@trellisproject/cli",
+  "version": "0.1.0",
+  "description": "Trellis CLI — report reality (facts, measurements) to a Trellis project",
+  "type": "module",
+  "bin": { "trellis": "./trellis.mjs" },
+  "files": ["trellis.mjs"],
+  "engines": { "node": ">=18" }
+}
