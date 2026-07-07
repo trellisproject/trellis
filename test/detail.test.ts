@@ -3,7 +3,7 @@ import { ingestSpec } from "../src/lib/ingest.js";
 import { writeFact } from "../src/lib/facts.js";
 import { resolveDrift } from "../src/lib/drift-resolve.js";
 import { getAssertionDetail } from "../src/lib/assertion-detail.js";
-import { createMilestone, assertionsByMilestone } from "../src/lib/milestones.js";
+import { createEffort, assertionsByEffort } from "../src/lib/efforts.js";
 import { resetDb, makeProject } from "./helpers/db.js";
 
 let projectId: string;
@@ -37,11 +37,11 @@ describe("assertion detail hub (TRL-UI-004/010)", () => {
   });
 });
 
-describe("milestone breakdown (roadmap legibility)", () => {
-  it("lists a milestone's assertions with their live status", async () => {
-    const m = await createMilestone(projectId, { title: "M1", assertions: ["T-X-001", "T-X-002"] });
+describe("effort breakdown (roadmap legibility)", () => {
+  it("lists an effort's assertions with their live status", async () => {
+    const m = await createEffort(projectId, { title: "M1", assertions: ["T-X-001", "T-X-002"] });
     if (!m.ok) throw new Error(m.code);
-    const byMs = await assertionsByMilestone(projectId);
+    const byMs = await assertionsByEffort(projectId);
     const list = byMs.get(m.value.id)!;
     expect(list.map((a) => a.humanId)).toEqual(["T-X-001", "T-X-002"]);
     expect(list.every((a) => a.status === "agreed")).toBe(true);

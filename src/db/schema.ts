@@ -326,7 +326,7 @@ export const decisions = pgTable("decisions", {
   actorId: text("actor_id")
     .references(() => principals.id)
     .notNull(),
-  onType: text("on_type").$type<"assertion" | "drift" | "challenge" | "milestone" | "request">().notNull(),
+  onType: text("on_type").$type<"assertion" | "drift" | "challenge" | "milestone" | "effort" | "request">().notNull(),
   onId: text("on_id").notNull(),
   choice: text("choice").notNull(), // agree|retire|amend|fix|accept|uphold|supersede|scope|date
   rationale: text("rationale").notNull(), // TRL-CORE-018: non-empty enforced in app
@@ -358,22 +358,30 @@ export const challenges = pgTable("challenges", {
 
 // --- Milestones (TRL-CORE-024) ---------------------------------------------
 
-export const milestones = pgTable("milestones", {
+// Efforts (TRL-CORE-024/036/037) — the roadmap's focus stack. Physical table
+// stays "milestones" (additive evolution); the concept is an Effort: an
+// attention-ordered major effort with a goal, not a dated release.
+export const efforts = pgTable("milestones", {
   id: id(),
   projectId: text("project_id")
     .references(() => projects.id)
     .notNull(),
   title: text("title").notNull(),
+  // Attention, not date: what you're on now vs later.
+  status: text("status").$type<"active" | "next" | "someday" | "done">().notNull().default("next"),
+  // How "done" is judged: a set of assertions, a metric threshold, or open-ended.
+  goalType: text("goal_type").$type<"checklist" | "metric" | "open">().notNull().default("checklist"),
+  goalTarget: text("goal_target"), // e.g. ">= 95% on ACORD-125" for a metric effort
   order: integer("order").notNull().default(0),
-  targetDate: date("target_date"),
+  targetDate: date("target_date"), // optional; efforts are not date-driven
   version: integer("version").notNull().default(1),
   createdAt: createdAt(),
 });
 
-export const milestoneAssertions = pgTable("milestone_assertions", {
+export const effortAssertions = pgTable("milestone_assertions", {
   id: id(),
-  milestoneId: text("milestone_id")
-    .references(() => milestones.id)
+  effortId: text("milestone_id")
+    .references(() => efforts.id)
     .notNull(),
   assertionId: text("assertion_id")
     .references(() => assertions.id)

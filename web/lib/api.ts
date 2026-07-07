@@ -27,8 +27,16 @@ export type Assertion = { id: string; humanId: string; title: string; statement:
 export type Spec = { id: string; slug: string; title: string; version: number };
 export type Drift = { id: string; kind: "reality" | "contradiction"; assertionId: string; assertionBId: string | null; status: string; summary: string };
 export type Challenge = { id: string; onDecisionId: string; rationale: string; status: string };
-export type MilestoneAssertion = { humanId: string; title: string; status: AssertionStatus };
-export type Milestone = { id: string; title: string; targetDate: string | null; progress: { verified: number; total: number }; assertions: MilestoneAssertion[] };
+export type EffortAssertion = { humanId: string; title: string; status: AssertionStatus };
+export type Effort = {
+  id: string; title: string;
+  status: "active" | "next" | "someday" | "done";
+  goalType: "checklist" | "metric" | "open";
+  goalTarget: string | null;
+  targetDate: string | null;
+  progress: { verified: number; total: number };
+  assertions: EffortAssertion[];
+};
 export type LinkedFact = { relation: "supports" | "contradicts"; id: string; statement: string; observerId: string; evidence: { type: string; ref: string }[]; observedAt: string };
 export type StatusEvent = { id: string; status: AssertionStatus; note: string | null; at: string };
 export type AssertionDetail = {
