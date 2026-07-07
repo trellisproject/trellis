@@ -3,33 +3,39 @@ import { useEffect, useState } from "react";
 import { api, type Assertion } from "@/lib/api";
 import { Badge } from "./Badge";
 
-// Link existing assertions to a request (derived_from). New assertion text is
-// authored in the spec file (git owns statements) — here you attach intent
-// that already exists in a spec.
-export function LinkAssertionsModal({ pid, requestId, onClose, onDone }: { pid: string; requestId: string; onClose: () => void; onDone: () => void }) {
+// Reusable assertion picker. Used to link assertions to a request (no decision)
+// and to add assertions to an effort (a scope decision — requireRationale).
+export function AssertionPickerModal({
+  pid, title, subtitle, excludeHumanIds, requireRationale, submitLabel, onClose, onSubmit,
+}: {
+  pid: string;
+  title: string;
+  subtitle: string;
+  excludeHumanIds: string[];
+  requireRationale?: boolean;
+  submitLabel?: string;
+  onClose: () => void;
+  onSubmit: (selected: string[], rationale: string) => Promise<void>;
+}) {
   const [assertions, setAssertions] = useState<Assertion[]>([]);
-  const [alreadyLinked, setAlreadyLinked] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [rationale, setRationale] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     (async () => {
-      const [specs, req] = await Promise.all([
-        api.get<{ specs: { slug: string }[] }>(`/projects/${pid}/specs`),
-        api.get<{ request: { derived: { humanId: string }[] } }>(`/projects/${pid}/requests/${requestId}`),
-      ]);
+      const specs = await api.get<{ specs: { slug: string }[] }>(`/projects/${pid}/specs`);
       const all: Assertion[] = [];
       for (const s of specs.specs) {
         const d = await api.get<{ assertions: Assertion[] }>(`/projects/${pid}/specs/${s.slug}`);
         all.push(...d.assertions.filter((a) => a.status !== "retired"));
       }
       setAssertions(all);
-      setAlreadyLinked(new Set(req.request.derived.map((d) => d.humanId)));
       setLoading(false);
     })().catch((e) => { setError(e instanceof Error ? e.message : "Failed to load"); setLoading(false); });
-  }, [pid, requestId]);
+  }, [pid]);
 
   function toggle(h: string) {
     const n = new Set(selected);
@@ -40,28 +46,26 @@ export function LinkAssertionsModal({ pid, requestId, onClose, onDone }: { pid: 
   async function submit() {
     setBusy(true); setError("");
     try {
-      await api.post(`/projects/${pid}/requests/${requestId}/assertions`, { assertions: [...selected] });
-      onDone();
+      await onSubmit([...selected], rationale);
+      onClose();
     } catch (e) { setError(e instanceof Error ? e.message : "Failed"); setBusy(false); }
   }
 
-  const available = assertions.filter((a) => !alreadyLinked.has(a.humanId));
+  const exclude = new Set(excludeHumanIds);
+  const available = assertions.filter((a) => !exclude.has(a.humanId));
+  const canSubmit = selected.size > 0 && (!requireRationale || rationale.trim().length > 0);
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
-        <h3>Link assertions to this request</h3>
-        <p className="mutedtext" style={{ fontSize: 13, marginTop: 4 }}>
-          Attach intent that already exists in a spec. To add new intent, author it in the spec file (marked derived from this request) and ingest — then link it here.
-        </p>
+        <h3>{title}</h3>
+        <p className="mutedtext" style={{ fontSize: 13, marginTop: 4 }}>{subtitle}</p>
         {loading ? (
           <div className="empty">Loading assertions…</div>
         ) : available.length === 0 ? (
-          <div className="empty" style={{ padding: 24 }}>
-            No unlinked assertions in any spec yet. Author them in the spec file and ingest first.
-          </div>
+          <div className="empty" style={{ padding: 24 }}>No unassigned assertions. Author them in the spec file and ingest first.</div>
         ) : (
-          <div style={{ maxHeight: 320, overflowY: "auto", border: "1px solid var(--border)", borderRadius: 8 }}>
+          <div style={{ maxHeight: 300, overflowY: "auto", border: "1px solid var(--border)", borderRadius: 8 }}>
             {available.map((a) => (
               <label key={a.humanId} className="row between" style={{ display: "flex", cursor: "pointer" }}>
                 <div className="flex" style={{ minWidth: 0 }}>
@@ -74,10 +78,16 @@ export function LinkAssertionsModal({ pid, requestId, onClose, onDone }: { pid: 
             ))}
           </div>
         )}
+        {requireRationale && (
+          <>
+            <label>Rationale (required — a scope change is a decision)</label>
+            <textarea className="input" rows={2} value={rationale} onChange={(e) => setRationale(e.target.value)} placeholder="Why bring this into the effort?" />
+          </>
+        )}
         {error && <p style={{ color: "var(--red)", fontSize: 13 }}>{error}</p>}
         <div className="between" style={{ marginTop: 16 }}>
           <button className="btn ghost" onClick={onClose}>Cancel</button>
-          <button className="btn primary" onClick={submit} disabled={busy || selected.size === 0}>{busy ? "Linking…" : `Link ${selected.size || ""}`}</button>
+          <button className="btn primary" onClick={submit} disabled={busy || !canSubmit}>{busy ? "Working…" : `${submitLabel ?? "Add"} ${selected.size || ""}`}</button>
         </div>
       </div>
     </div>

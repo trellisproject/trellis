@@ -3,6 +3,7 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { api, type Effort } from "@/lib/api";
 import { Badge } from "@/components/Badge";
+import { AssertionPickerModal } from "@/components/AssertionPickerModal";
 
 const GROUPS: { status: Effort["status"]; label: string }[] = [
   { status: "active", label: "Active — focus now" },
@@ -23,6 +24,8 @@ export default function Roadmap({ params }: { params: Promise<{ pid: string }> }
     setLoading(false);
   }
   useEffect(() => { load(); }, [pid]);
+
+  const [addingTo, setAddingTo] = useState<Effort | null>(null);
 
   async function setStatus(e: Effort, status: Effort["status"]) {
     await api.patch(`/projects/${pid}/efforts/${e.id}`, { status });
@@ -45,26 +48,40 @@ export default function Roadmap({ params }: { params: Promise<{ pid: string }> }
           return (
             <div key={g.status}>
               <div className="section-label">{g.label} · {items.length}</div>
-              {items.map((e) => <EffortCard key={e.id} pid={pid} e={e} onStatus={setStatus} />)}
+              {items.map((e) => <EffortCard key={e.id} pid={pid} e={e} onStatus={setStatus} onAdd={() => setAddingTo(e)} />)}
             </div>
           );
         })}
       </div>
       {creating && <CreateEffortModal pid={pid} onClose={() => setCreating(false)} onDone={() => { setCreating(false); setLoading(true); load(); }} />}
+      {addingTo && (
+        <AssertionPickerModal
+          pid={pid}
+          title={`Add assertions to "${addingTo.title}"`}
+          subtitle="Assign intent to this effort. Its progress is computed from these assertions."
+          excludeHumanIds={addingTo.assertions.map((a) => a.humanId)}
+          requireRationale
+          onClose={() => setAddingTo(null)}
+          onSubmit={async (sel, rationale) => { await api.patch(`/projects/${pid}/efforts/${addingTo.id}`, { add_assertions: sel, rationale }); setAddingTo(null); load(); }}
+        />
+      )}
     </>
   );
 }
 
-function EffortCard({ pid, e, onStatus }: { pid: string; e: Effort; onStatus: (e: Effort, s: Effort["status"]) => void }) {
+function EffortCard({ pid, e, onStatus, onAdd }: { pid: string; e: Effort; onStatus: (e: Effort, s: Effort["status"]) => void; onAdd: () => void }) {
   const pct = e.progress.total === 0 ? 0 : Math.round((e.progress.verified / e.progress.total) * 100);
   return (
     <div className="card">
       <div className="row">
         <div className="between" style={{ marginBottom: 10 }}>
           <div className="flex"><strong>{e.title}</strong><span className="pill" style={{ textTransform: "capitalize" }}>{e.goalType}</span></div>
-          <select className="mini-select" value={e.status} onChange={(ev) => onStatus(e, ev.target.value as Effort["status"])}>
-            <option value="active">active</option><option value="next">next</option><option value="someday">someday</option><option value="done">done</option>
-          </select>
+          <div className="flex">
+            {e.goalType !== "metric" && <button className="btn ghost" onClick={onAdd}>+ Add assertions</button>}
+            <select className="mini-select" value={e.status} onChange={(ev) => onStatus(e, ev.target.value as Effort["status"])}>
+              <option value="active">active</option><option value="next">next</option><option value="someday">someday</option><option value="done">done</option>
+            </select>
+          </div>
         </div>
         {e.goalType === "metric" ? (
           <div className="mutedtext" style={{ fontSize: 13 }}>Goal: <span style={{ color: "var(--text)" }}>{e.goalTarget || "(set a target)"}</span><span style={{ marginLeft: 10, opacity: 0.7 }}>· metric tracking arrives with metric assertions</span></div>

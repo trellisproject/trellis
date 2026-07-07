@@ -3,7 +3,7 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { api, type Request } from "@/lib/api";
 import { Badge } from "@/components/Badge";
-import { LinkAssertionsModal } from "@/components/LinkAssertionsModal";
+import { AssertionPickerModal } from "@/components/AssertionPickerModal";
 
 export default function Requests({ params }: { params: Promise<{ pid: string }> }) {
   const { pid } = use(params);
@@ -68,7 +68,17 @@ export default function Requests({ params }: { params: Promise<{ pid: string }> 
       </div>
       {creating && <CreateModal pid={pid} onClose={() => setCreating(false)} onDone={() => { setCreating(false); setLoading(true); load(); }} />}
       {decide && <DecideModal pid={pid} req={decide} onClose={() => setDecide(null)} onDone={() => { setDecide(null); setLoading(true); load(); }} />}
-      {linking && <LinkAssertionsModal pid={pid} requestId={linking.id} onClose={() => setLinking(null)} onDone={() => { setLinking(null); setLoading(true); load(); }} />}
+      {linking && (
+        <AssertionPickerModal
+          pid={pid}
+          title="Link assertions to this request"
+          subtitle="Attach intent that already exists in a spec. New intent is authored in the spec file (derived from this request) and ingested."
+          excludeHumanIds={linking.derived.map((d) => d.humanId)}
+          submitLabel="Link"
+          onClose={() => setLinking(null)}
+          onSubmit={async (sel) => { await api.post(`/projects/${pid}/requests/${linking.id}/assertions`, { assertions: sel }); setLinking(null); setLoading(true); load(); }}
+        />
+      )}
     </>
   );
 }

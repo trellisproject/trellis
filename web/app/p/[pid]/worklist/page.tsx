@@ -2,7 +2,7 @@
 import { Fragment, use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, type Worklist, type WorklistItem, type Priority } from "@/lib/api";
-import { LinkAssertionsModal } from "@/components/LinkAssertionsModal";
+import { AssertionPickerModal } from "@/components/AssertionPickerModal";
 
 const BUCKETS: { key: string; label: string; blurb: string }[] = [
   { key: "decide", label: "Decide", blurb: "A judgment is owed — drifts, challenges, new requests" },
@@ -90,7 +90,15 @@ export default function WorklistPage({ params }: { params: Promise<{ pid: string
         {wl && total === 0 && <div className="card"><div className="empty">Nothing needs action. Intent and reality agree, and everything agreed is built and verified. ✓</div></div>}
       </div>
       {action?.type === "link-assertions" ? (
-        <LinkAssertionsModal pid={pid} requestId={action.item.id} onClose={() => setAction(null)} onDone={() => { setAction(null); load(); }} />
+        <AssertionPickerModal
+          pid={pid}
+          title="Link assertions to this request"
+          subtitle="Attach intent that already exists in a spec. New intent is authored in the spec file (derived from this request) and ingested."
+          excludeHumanIds={[]}
+          submitLabel="Link"
+          onClose={() => setAction(null)}
+          onSubmit={async (sel) => { await api.post(`/projects/${pid}/requests/${action.item.id}/assertions`, { assertions: sel }); load(); }}
+        />
       ) : action ? (
         <ActionModal pid={pid} action={action} onClose={() => setAction(null)} onDone={() => { setAction(null); load(); }} />
       ) : null}
