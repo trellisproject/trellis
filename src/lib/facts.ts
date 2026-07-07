@@ -33,7 +33,7 @@ export type WriteFactInput = {
 };
 
 export type WriteFactResult =
-  | { ok: true; fact: typeof facts.$inferSelect; driftsCreated: string[] }
+  | { ok: true; fact: typeof facts.$inferSelect; driftsCreated: string[]; verified: string[] }
   | { ok: false; code: string; error: string };
 
 // Statuses from which a contradiction can knock an assertion into 'drifted'.
@@ -95,6 +95,7 @@ export async function writeFact(
     )[0]!;
 
     const driftsCreated: string[] = [];
+    const verified: string[] = [];
 
     for (const link of links) {
       const assertion = linkedByHumanId.get(link.assertion)!;
@@ -104,7 +105,25 @@ export async function writeFact(
         relation: link.relation,
       });
 
-      if (link.relation !== "contradicts") continue;
+      if (link.relation === "supports") {
+        // TRL-CORE-005: a supporting fact is the sanctioned path to verified.
+        // Only an agreed/implemented assertion advances; drifted must resolve
+        // first, proposed isn't intent yet.
+        if (assertion.status === "agreed" || assertion.status === "implemented") {
+          await tx
+            .update(assertions)
+            .set({ status: "verified", version: assertion.version + 1, updatedAt: new Date() })
+            .where(eq(assertions.id, assertion.id));
+          await tx.insert(assertionStatusHistory).values({
+            assertionId: assertion.id,
+            status: "verified",
+            byPrincipalId: input.observerId,
+            note: `verified by fact ${fact.id}`,
+          });
+          verified.push(assertion.humanId);
+        }
+        continue;
+      }
 
       // Find an open drift for this assertion to attach to (dedup — TRL-CORE-010).
       const open = (
@@ -172,6 +191,6 @@ export async function writeFact(
       driftsCreated.push(drift.id);
     }
 
-    return { ok: true, fact, driftsCreated };
+    return { ok: true, fact, driftsCreated, verified };
   });
 }

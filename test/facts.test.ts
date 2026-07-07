@@ -126,6 +126,42 @@ describe("automatic drift filing", () => {
   });
 });
 
+describe("verification via supporting fact (TRL-CORE-005)", () => {
+  const support = { observerId: "", key: "v", value: true, statement: "verified", evidence: ev, links: [{ assertion: "T-X-001", relation: "supports" as const }] };
+
+  it("verifies an implemented assertion", async () => {
+    await seed(A("T-X-001", "agreed"));
+    await db.update(assertions).set({ status: "implemented" }).where(eq(assertions.humanId, "T-X-001"));
+    const r = await writeFact(projectId, { ...support, observerId: operatorId });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.verified).toEqual(["T-X-001"]);
+    expect((await db.select().from(assertions).where(eq(assertions.humanId, "T-X-001")))[0]!.status).toBe("verified");
+  });
+
+  it("verifies an agreed assertion", async () => {
+    await seed(A("T-X-001", "agreed"));
+    const r = await writeFact(projectId, { ...support, observerId: operatorId });
+    if (r.ok) expect(r.verified).toEqual(["T-X-001"]);
+    expect((await db.select().from(assertions).where(eq(assertions.humanId, "T-X-001")))[0]!.status).toBe("verified");
+  });
+
+  it("does not verify a proposed assertion", async () => {
+    await seed(A("T-X-001", "proposed"));
+    const r = await writeFact(projectId, { ...support, observerId: operatorId });
+    if (r.ok) expect(r.verified).toEqual([]);
+    expect((await db.select().from(assertions).where(eq(assertions.humanId, "T-X-001")))[0]!.status).toBe("proposed");
+  });
+
+  it("does not verify a drifted assertion (must resolve first)", async () => {
+    await seed(A("T-X-001", "agreed"));
+    // drift it via a contradicting fact
+    await writeFact(projectId, { observerId: operatorId, key: "k", value: false, statement: "no", evidence: ev, links: [{ assertion: "T-X-001", relation: "contradicts" }] });
+    const r = await writeFact(projectId, { ...support, observerId: operatorId });
+    if (r.ok) expect(r.verified).toEqual([]);
+    expect((await db.select().from(assertions).where(eq(assertions.humanId, "T-X-001")))[0]!.status).toBe("drifted");
+  });
+});
+
 describe("work queues", () => {
   it("checker queue lists agreed assertions lacking a fresh supporting fact (TRL-CORE-009)", async () => {
     await seed(A("T-X-001", "agreed") + A("T-X-002", "agreed"));
