@@ -25,10 +25,10 @@ jobs:
         with:
           node-version: 20
       - name: Install
-        run: npm ci
+        run: npm install --no-audit --no-fund
       - name: Typecheck (server)
         run: npx tsc --noEmit
       - name: Test
         run: npx vitest run
       - name: Typecheck (web)
-        run: cd web && npm ci && npx tsc --noEmit
+        run: cd web && npm install --no-audit --no-fund && npx tsc --noEmit
