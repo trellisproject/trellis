@@ -171,7 +171,12 @@ async function main() {
   console.log(`\nOPEN WORK — tasks (${tasks.tasks.length}):`);
   for (const t of tasks.tasks) console.log(`    [${t.status}] ${t.title}`);
 
-  console.log("\n========================================================\n");
+  console.log("\n========================================================");
+  console.log("  Connect the UI to this seeded project:");
+  console.log(`  URL:   ${BASE}`);
+  console.log(`  Token: ${opTok}`);
+  console.log(`  (project ${pid})`);
+  console.log("========================================================\n");
 }
 
 main().catch((e) => {
