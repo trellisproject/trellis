@@ -152,8 +152,9 @@ export async function getTask(projectId: string, taskId: string) {
   const task = (await db.select().from(tasks).where(eq(tasks.id, taskId)))[0];
   if (!task || task.projectId !== projectId) return null;
   const links = await db
-    .select({ assertionId: taskAssertions.assertionId })
+    .select({ id: assertions.id, humanId: assertions.humanId, title: assertions.title })
     .from(taskAssertions)
+    .innerJoin(assertions, eq(assertions.id, taskAssertions.assertionId))
     .where(eq(taskAssertions.taskId, taskId));
   const checkpoints = await db
     .select()
@@ -163,5 +164,5 @@ export async function getTask(projectId: string, taskId: string) {
     .select({ dependsOn: taskDependencies.dependsOnTaskId })
     .from(taskDependencies)
     .where(eq(taskDependencies.taskId, taskId));
-  return { task, assertions: links.map((l) => l.assertionId), checkpoints, dependsOn: deps.map((d) => d.dependsOn) };
+  return { task, assertions: links, checkpoints, dependsOn: deps.map((d) => d.dependsOn) };
 }

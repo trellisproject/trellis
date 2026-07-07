@@ -6,23 +6,10 @@ import { api, type TaskDetail } from "@/lib/api";
 export default function TaskPage({ params }: { params: Promise<{ pid: string; tid: string }> }) {
   const { pid, tid } = use(params);
   const [d, setD] = useState<TaskDetail | null>(null);
-  const [assertionIds, setAssertionIds] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    (async () => {
-      const detail = await api.get<TaskDetail>(`/tasks/${tid}`);
-      setD(detail);
-      // map assertion uuids -> human ids via the specs
-      const specs = await api.get<{ specs: { slug: string }[] }>(`/projects/${pid}/specs`);
-      const map: Record<string, string> = {};
-      for (const s of specs.specs) {
-        const sd = await api.get<{ assertions: { id: string; humanId: string }[] }>(`/projects/${pid}/specs/${s.slug}`);
-        for (const a of sd.assertions) map[a.id] = a.humanId;
-      }
-      setAssertionIds(map);
-      setLoading(false);
-    })().catch(() => setLoading(false));
+    api.get<TaskDetail>(`/tasks/${tid}`).then((detail) => { setD(detail); setLoading(false); }).catch(() => setLoading(false));
   }, [pid, tid]);
 
   if (loading) return <div className="content"><div className="empty">Loading…</div></div>;
@@ -39,11 +26,12 @@ export default function TaskPage({ params }: { params: Promise<{ pid: string; ti
         <div className="section-label" style={{ marginTop: 0 }}>Linked intent</div>
         <div className="card">
           {d.assertions.length === 0 ? <div className="empty" style={{ padding: 24 }}>No linked assertions.</div> :
-            d.assertions.map((aid) => {
-              const h = assertionIds[aid];
-              return h ? <Link key={aid} href={`/p/${pid}/a/${h}`} className="row" style={{ display: "block" }}><span className="aid">{h}</span></Link>
-                : <div key={aid} className="row"><span className="aid">{aid}</span></div>;
-            })}
+            d.assertions.map((a) => (
+              <Link key={a.id} href={`/p/${pid}/a/${a.humanId}`} className="row between" style={{ display: "flex" }}>
+                <div className="flex" style={{ minWidth: 0 }}><span className="aid">{a.humanId}</span><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.title}</span></div>
+                <span className="mutedtext">→</span>
+              </Link>
+            ))}
         </div>
 
         <div className="section-label">Checkpoints — resumable progress</div>

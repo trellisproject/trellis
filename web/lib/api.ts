@@ -62,7 +62,7 @@ export type AssertionDetail = {
   decisions: Decision[];
   measurements: { value: number; at: string }[];
 };
-export type TaskDetail = { task: Task; assertions: string[]; checkpoints: { id: string; note: string; at: string }[]; dependsOn: string[] };
+export type TaskDetail = { task: Task; assertions: { id: string; humanId: string; title: string }[]; checkpoints: { id: string; note: string; at: string }[]; dependsOn: string[] };
 export type Priority = "now" | "normal" | "later";
 export type WorklistItem = { bucket: string; kind: "drift" | "challenge" | "request" | "assertion"; id: string; ref: string; title: string; priority: Priority; action: string; owner?: string | null; dueInDays?: number | null; commitment?: boolean };
 export type Worklist = { buckets: Record<string, WorklistItem[]>; counts: Record<string, number> };

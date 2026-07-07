@@ -37,7 +37,7 @@ export async function addMember(
   projectId: string,
   kind: "human" | "agent",
   role: "operator" | "member",
-  name = kind,
+  name: string = kind,
 ): Promise<string> {
   const p = (await db.insert(principals).values({ kind, displayName: name }).returning())[0]!;
   await db.insert(memberships).values({ projectId, principalId: p.id, role });
