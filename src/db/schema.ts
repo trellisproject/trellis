@@ -124,6 +124,9 @@ export const specs = pgTable(
       .notNull(),
     slug: text("slug").notNull(),
     title: text("title").notNull(),
+    // The assertion-id prefix (e.g. "TRL-CORE"); assertions are <code>-<NNN>.
+    // Set from frontmatter on import, or supplied when a spec is created in-app.
+    code: text("code"),
     bodyMd: text("body_md").default("").notNull(),
     version: integer("version").notNull().default(1),
     // TRL-API-014: the git commit a spec's current statements were ingested from.

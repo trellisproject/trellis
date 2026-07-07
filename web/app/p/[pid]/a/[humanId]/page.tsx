@@ -25,7 +25,7 @@ export default function AssertionHub({ params }: { params: Promise<{ pid: string
       </div>
       <div className="content">
         <div className="card"><div className="row">
-          <div className="section-label" style={{ marginTop: 0 }}>Statement · read-only, authored in git</div>
+          <div className="section-label" style={{ marginTop: 0 }}>Statement · authored in Trellis, mirrored to git · edit on the spec page</div>
           <div>{a.statement}</div>
         </div></div>
 

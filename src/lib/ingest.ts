@@ -54,12 +54,13 @@ export async function ingestSpec(
       };
     }
 
+    const code = parsed.frontmatter.spec ?? null;
     const specRow =
       existing ??
       (
         await tx
           .insert(specs)
-          .values({ projectId, slug, title, bodyMd: parsed.bodyMd })
+          .values({ projectId, slug, title, code, bodyMd: parsed.bodyMd })
           .returning()
       )[0]!;
 
@@ -68,6 +69,7 @@ export async function ingestSpec(
         .update(specs)
         .set({
           title,
+          code: code ?? existing.code,
           bodyMd: parsed.bodyMd,
           version: existing.version + 1,
           lastIngestedCommit: sourceCommit ?? existing.lastIngestedCommit,

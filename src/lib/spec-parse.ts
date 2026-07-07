@@ -35,6 +35,15 @@ const ASSERTION_HEADING = /^###\s+([A-Z]+-[A-Z]+-\d{3}):\s+(.+?)\s*$/;
 const OTHER_HEADING = /^#{1,3}\s+/;
 const STATUS_LINE = /^status:\s*(\S+)\s*$/;
 const METRIC_LINE = /^metric:\s*(\S+)\s*(>=|<=|>|<|==)\s*([0-9]+(?:\.[0-9]+)?)\s*(\S+)?\s*$/i;
+const OP_MAP: Record<string, Comparator> = { ">=": "gte", ">": "gt", "<=": "lte", "<": "lt", "==": "eq" };
+
+// Parse a bare metric expression "key >= 95%" (no "metric:" prefix) — used by
+// the in-app authoring API.
+export function parseMetricExpr(expr: string): ParsedMetric | null {
+  const m = /^(\S+)\s*(>=|<=|>|<|==)\s*([0-9]+(?:\.[0-9]+)?)\s*(\S+)?\s*$/.exec(expr.trim());
+  if (!m) return null;
+  return { key: m[1]!, comparator: OP_MAP[m[2]!]!, target: Number(m[3]), unit: m[4] ?? null };
+}
 
 export function parseSpec(source: string): ParseResult {
   const errors: ParseResult["errors"] = [];

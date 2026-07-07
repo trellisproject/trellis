@@ -171,6 +171,33 @@ async function cmdWorklist(cfg, flags) {
   console.log(`\ntotal: ${Object.values(counts).reduce((a, b) => a + b, 0)}`);
 }
 
+// Write the git mirror: pull each spec's markdown and write it to <dir>/<slug>.md.
+async function cmdExport(cfg, flags) {
+  const dir = flags.dir || "specs";
+  const token = await resolveToken(cfg, { allowJoin: true });
+  const { specs } = await api(cfg, "GET", `/projects/${cfg.project}/specs`, null, token);
+  mkdirSync(resolve(dir), { recursive: true });
+  for (const s of specs) {
+    const res = await fetch(`${cfg.url}/projects/${cfg.project}/specs/${s.slug}/export`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) fail(`export ${s.slug} -> ${res.status}`);
+    const md = await res.text();
+    writeFileSync(resolve(dir, `${s.slug}.md`), md);
+    console.log(`wrote ${dir}/${s.slug}.md`);
+  }
+  console.log(`\n${specs.length} spec(s) mirrored to ${dir}/`);
+}
+
+// Import a spec-format markdown file into Trellis (bootstrap / absorb edits).
+async function cmdIngest(cfg, positional, flags) {
+  const [, slug, file] = positional;
+  if (!slug || !file) fail("usage: trellis ingest <slug> <file>");
+  const token = await resolveToken(cfg, { name: flags.name });
+  const source = readFileSync(file, "utf8");
+  const r = await api(cfg, "POST", `/projects/${cfg.project}/specs/ingest`, { slug, source, commit: gitCommit() }, token);
+  if (!r.ok) fail(`ingest rejected: ${r.errors.map((e) => `L${e.line} ${e.message}`).join("; ")}`);
+  console.log(`ingested ${slug}: ${r.created.length} created, ${r.statementsUpdated.length} updated, ${r.retired.length} retired`);
+}
+
 async function cmdStatus(cfg) {
   const token = await resolveToken(cfg, { allowJoin: true });
   const efforts = (await api(cfg, "GET", `/projects/${cfg.project}/efforts`, null, token)).efforts;
@@ -188,6 +215,8 @@ const HELP = `trellis — report reality to a Trellis project
   trellis measure <key> <value>        post one metric measurement
   trellis fact --statement T [--supports A|--contradicts A] [--evidence t:r]
   trellis worklist [--effort ID]       print the worklist
+  trellis export [--dir specs]         write the git mirror (spec markdown)
+  trellis ingest <slug> <file>         import a spec-format markdown file
   trellis status                       efforts summary
 
 config: .trellis.json { url, project, joinCode, name?, checks? }
@@ -204,6 +233,8 @@ async function main() {
     case "measure": return cmdMeasure(cfg, positional, flags);
     case "fact": return cmdFact(cfg, flags);
     case "worklist": return cmdWorklist(cfg, flags);
+    case "export": return cmdExport(cfg, flags);
+    case "ingest": return cmdIngest(cfg, positional, flags);
     case "status": return cmdStatus(cfg);
     default: fail(`unknown command "${cmd}" — try \`trellis help\``);
   }
