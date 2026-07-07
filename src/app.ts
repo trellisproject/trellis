@@ -10,6 +10,7 @@ import { effortRoutes } from "./routes/efforts.js";
 import { githubRoutes } from "./routes/github.js";
 import { requestRoutes } from "./routes/requests.js";
 import { worklistRoutes } from "./routes/worklist.js";
+import { delegationRoutes } from "./routes/delegations.js";
 import { authenticate } from "./middleware/auth.js";
 import type { AppEnv } from "./types.js";
 
@@ -31,5 +32,6 @@ app.route("/", effortRoutes);
 app.route("/", githubRoutes);
 app.route("/", requestRoutes);
 app.route("/", worklistRoutes);
+app.route("/", delegationRoutes);
 
 export type App = typeof app;

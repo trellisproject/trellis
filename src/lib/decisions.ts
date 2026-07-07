@@ -34,27 +34,29 @@ export async function authorizeDecider(
     return { ok: true, delegationId: null };
   }
 
-  // agent principal — requires a valid delegation (TRL-API-013)
-  if (!delegatedById) {
-    return { ok: false, code: "DELEGATION_REQUIRED", error: "Agent decisions require a delegation" };
+  // agent principal — decides only under an active delegation (TRL-API-013).
+  // If the caller named a delegation, validate it; otherwise auto-resolve the
+  // agent's active delegation covering this class, so callers needn't thread ids.
+  const active = await db
+    .select()
+    .from(delegations)
+    .where(
+      and(
+        eq(delegations.projectId, projectId),
+        eq(delegations.agentPrincipalId, actorId),
+        eq(delegations.active, true),
+      ),
+    );
+  const covers = (d: (typeof active)[number]) => d.decisionClasses.includes("*") || d.decisionClasses.includes(requiredClass);
+
+  if (delegatedById) {
+    const named = active.find((d) => d.id === delegatedById);
+    if (!named) return { ok: false, code: "INVALID_DELEGATION", error: "No active delegation for this agent" };
+    if (!covers(named)) return { ok: false, code: "DELEGATION_SCOPE", error: `Delegation does not authorize ${requiredClass}` };
+    return { ok: true, delegationId: named.id };
   }
-  const del = (
-    await db
-      .select()
-      .from(delegations)
-      .where(
-        and(
-          eq(delegations.id, delegatedById),
-          eq(delegations.projectId, projectId),
-          eq(delegations.agentPrincipalId, actorId),
-          eq(delegations.active, true),
-        ),
-      )
-  )[0];
-  if (!del) return { ok: false, code: "INVALID_DELEGATION", error: "No active delegation for this agent" };
-  const classes = del.decisionClasses;
-  if (!classes.includes("*") && !classes.includes(requiredClass)) {
-    return { ok: false, code: "DELEGATION_SCOPE", error: `Delegation does not authorize ${requiredClass}` };
-  }
+
+  const del = active.find(covers);
+  if (!del) return { ok: false, code: "DELEGATION_REQUIRED", error: `Agent decisions require a delegation authorizing ${requiredClass}` };
   return { ok: true, delegationId: del.id };
 }

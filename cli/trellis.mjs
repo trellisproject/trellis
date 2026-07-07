@@ -282,6 +282,38 @@ async function cmdShow(cfg, positional, flags) {
   if (open.length) { console.log(`open drifts:`); for (const dr of open) console.log(`  ${dr.id} — ${dr.summary}`); }
 }
 
+// Operator grants an agent scoped, reversible decision authority (the only
+// sanctioned way for an agent to agree/retire/resolve). Needs an operator token.
+async function cmdDelegate(cfg, positional, flags) {
+  const agent = positional[1];
+  if (!agent) fail('usage: trellis delegate <agentNameOrId> --classes assertion.agree,drift.resolve  (or --all)');
+  const classes = flags.all ? ["*"] : String(flags.classes || "").split(",").map((s) => s.trim()).filter(Boolean);
+  if (!classes.length) fail('need --classes "assertion.agree,assertion.retire,drift.resolve" (or --all)');
+  const token = await resolveToken(cfg, { name: flags.name });
+  const r = await api(cfg, "POST", `/projects/${cfg.project}/delegations`, { agent, classes, policy: flags.policy }, token);
+  console.log(`delegated to ${r.delegation.agentName}: [${r.delegation.decisionClasses.join(", ")}]\n  id ${r.delegation.id}  (revoke with: trellis revoke-delegation ${r.delegation.id})`);
+}
+
+async function cmdDelegations(cfg) {
+  const token = await resolveToken(cfg, { allowJoin: true });
+  const { delegations } = await api(cfg, "GET", `/projects/${cfg.project}/delegations`, null, token);
+  if (!delegations.length) return console.log("no delegations");
+  for (const d of delegations) console.log(`  ${d.active ? "active " : "revoked"}  ${d.id}  ${d.agentName}  [${d.decisionClasses.join(", ")}]`);
+}
+
+async function cmdRevokeDelegation(cfg, positional, flags) {
+  const id = positional[1];
+  if (!id) fail("usage: trellis revoke-delegation <id>");
+  await api(cfg, "POST", `/projects/${cfg.project}/delegations/${id}/revoke`, {}, await resolveToken(cfg, { name: flags.name }));
+  console.log(`revoked delegation ${id}`);
+}
+
+async function cmdMembers(cfg) {
+  const token = await resolveToken(cfg, { allowJoin: true });
+  const { members } = await api(cfg, "GET", `/projects/${cfg.project}/members`, null, token);
+  for (const m of members) console.log(`  ${m.principalId}  ${m.kind.padEnd(5)} ${m.role.padEnd(9)} ${m.name}`);
+}
+
 async function cmdStatus(cfg) {
   const token = await resolveToken(cfg, { allowJoin: true });
   const efforts = (await api(cfg, "GET", `/projects/${cfg.project}/efforts`, null, token)).efforts;
@@ -310,6 +342,10 @@ const HELP = `trellis — report reality to a Trellis project
   trellis drifts                       open drifts (the Decide bucket)
   trellis resolve <driftId> --amend|--fix|--accept --why R
   trellis show <humanId>               statement, status, facts, drifts
+  trellis members                      list project members (find an agent to delegate to)
+  trellis delegate <agent> --classes assertion.agree,assertion.retire,drift.resolve   (operator; or --all)
+  trellis delegations                  list delegations
+  trellis revoke-delegation <id>       revoke a delegation (operator)
   trellis status                       efforts summary
 
 config: .trellis.json { url, project, joinCode, name?, checks? }
@@ -335,6 +371,10 @@ async function main() {
     case "drifts": return cmdDrifts(cfg, flags);
     case "resolve": return cmdResolve(cfg, positional, flags);
     case "show": return cmdShow(cfg, positional, flags);
+    case "members": return cmdMembers(cfg);
+    case "delegate": return cmdDelegate(cfg, positional, flags);
+    case "delegations": return cmdDelegations(cfg);
+    case "revoke-delegation": return cmdRevokeDelegation(cfg, positional, flags);
     case "status": return cmdStatus(cfg);
     default: fail(`unknown command "${cmd}" — try \`trellis help\``);
   }
