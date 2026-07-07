@@ -4,6 +4,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { drifts, driftContradictingFacts, facts } from "../db/schema.js";
 import { writeFact } from "../lib/facts.js";
+import { fileContradiction } from "../lib/contradictions.js";
 import { checkerQueue, triageQueue } from "../lib/queues.js";
 import { requireMember, requireProjectMember } from "../middleware/auth.js";
 import type { AppEnv } from "../types.js";
@@ -78,6 +79,23 @@ factRoutes.get("/projects/:pid/facts", async (c) => {
     .orderBy(desc(facts.observedAt))
     .limit(50);
   return c.json({ facts: rows });
+});
+
+// POST /projects/:pid/contradictions — file a contradiction between two
+// assertions (TRL-CORE-025). Any member may file (observation-class).
+factRoutes.post("/projects/:pid/contradictions", async (c) => {
+  const m = await requireMember(c);
+  if (m instanceof Response) return m;
+  const body = z
+    .object({ assertion_a: z.string().min(1), assertion_b: z.string().min(1), summary: z.string().min(1) })
+    .safeParse(await c.req.json().catch(() => null));
+  if (!body.success) return c.json({ error: "Invalid body", code: "INVALID_INPUT" }, 422);
+  const r = await fileContradiction(c.req.param("pid"), body.data.assertion_a, body.data.assertion_b, body.data.summary, m.principalId);
+  if (!r.ok) {
+    const map: Record<string, number> = { SAME_ASSERTION: 422, UNKNOWN_ASSERTION: 422, NOT_DRIFTABLE: 422 };
+    return c.json({ error: r.error, code: r.code }, (map[r.code] ?? 400) as 400);
+  }
+  return c.json({ drift: r.value }, 201);
 });
 
 // GET /projects/:pid/drifts?status=&kind=

@@ -78,28 +78,36 @@ export async function resolveDrift(
       .set({ status: "resolved", resolutionDecisionId: decision.id, updatedAt: new Date() })
       .where(eq(drifts.id, driftId));
 
-    const assertion = (await tx.select().from(assertions).where(eq(assertions.id, drift.assertionId)))[0]!;
+    // Reality drift affects one assertion; a contradiction affects both
+    // (TRL-CORE-025). Restore each from 'drifted'.
+    const affectedIds = [drift.assertionId, ...(drift.assertionBId ? [drift.assertionBId] : [])];
+    const primary = (await tx.select().from(assertions).where(eq(assertions.id, drift.assertionId)))[0]!;
+    let primaryStatus: AssertionStatus = primary.status;
 
-    // TRL-CORE-013: fix/accept restore the assertion to its prior status;
-    // amend retires it (the replacement statement is authored in git).
-    let newStatus: AssertionStatus;
-    if (input.choice === "amend") {
-      newStatus = "retired";
-    } else {
-      newStatus = assertion.preDriftStatus ?? "agreed";
+    for (const aid of affectedIds) {
+      const a = (await tx.select().from(assertions).where(eq(assertions.id, aid)))[0]!;
+      // TRL-CORE-013: for a reality drift, amend retires the (unambiguous)
+      // assertion. For a contradiction, which side is wrong is decided in git,
+      // so all choices restore prior status and the retire lands via ingestion.
+      let newStatus: AssertionStatus;
+      if (drift.kind === "reality" && input.choice === "amend") {
+        newStatus = "retired";
+      } else {
+        newStatus = a.preDriftStatus ?? "agreed";
+      }
+      await tx
+        .update(assertions)
+        .set({ status: newStatus, preDriftStatus: null, version: a.version + 1, updatedAt: new Date() })
+        .where(eq(assertions.id, a.id));
+      await tx.insert(assertionStatusHistory).values({
+        assertionId: a.id,
+        status: newStatus,
+        byPrincipalId: input.actorId,
+        decisionId: decision.id,
+        note: `drift ${input.choice}`,
+      });
+      if (aid === drift.assertionId) primaryStatus = newStatus;
     }
-
-    await tx
-      .update(assertions)
-      .set({ status: newStatus, preDriftStatus: null, version: assertion.version + 1, updatedAt: new Date() })
-      .where(eq(assertions.id, assertion.id));
-    await tx.insert(assertionStatusHistory).values({
-      assertionId: assertion.id,
-      status: newStatus,
-      byPrincipalId: input.actorId,
-      decisionId: decision.id,
-      note: `drift ${input.choice}`,
-    });
 
     // TRL-CORE-011: 'fix' means reality is wrong — spawn a task to fix it.
     let taskId: string | null = null;
@@ -107,14 +115,14 @@ export async function resolveDrift(
       const task = (
         await tx
           .insert(tasks)
-          .values({ projectId, title: `Fix drift on ${assertion.humanId}`, status: "open", driftId })
+          .values({ projectId, title: `Fix drift on ${primary.humanId}`, status: "open", driftId })
           .returning()
       )[0]!;
-      await tx.insert(taskAssertions).values({ taskId: task.id, assertionId: assertion.id });
+      await tx.insert(taskAssertions).values({ taskId: task.id, assertionId: primary.id });
       taskId = task.id;
     }
 
-    return { ok: true, decisionId: decision.id, assertionStatus: newStatus, taskId };
+    return { ok: true, decisionId: decision.id, assertionStatus: primaryStatus, taskId };
   });
 }
 
