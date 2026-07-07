@@ -314,16 +314,43 @@ async function cmdMembers(cfg) {
   for (const m of members) console.log(`  ${m.principalId}  ${m.kind.padEnd(5)} ${m.role.padEnd(9)} ${m.name}`);
 }
 
-// Create a task — standalone by default; --assertion links it to intent,
-// --effort files it under an area (owner + deadline flow from there).
+// Tasks — create, and drive an existing one:
+//   trellis task "<title>" [--effort ID --owner ID --assertion HUMANID --desc T --priority P]
+//   trellis task update <id> [--status --owner --effort --priority --title --desc]
+//   trellis task done|claim <id>   ·   task checkpoint <id> --note "..."   ·   task handoff <id> --to <principalId>
 async function cmdTask(cfg, positional, flags) {
-  const title = positional.slice(1).join(" ").trim() || (typeof flags.title === "string" ? flags.title : "");
-  if (!title) fail('usage: trellis task "<title>" [--effort ID] [--owner ID] [--assertion HUMANID] [--desc TEXT] [--priority now|normal|later]');
   const token = await resolveToken(cfg, { name: flags.name });
-  const body = { title, description: flags.desc, effort_id: flags.effort || null, owner_id: flags.owner || null, priority: flags.priority };
+  const P = cfg.project;
+  const sub = positional[1];
+  const SUBS = ["update", "done", "claim", "checkpoint", "handoff", "add"];
+
+  if (SUBS.includes(sub) && sub !== "add") {
+    const id = positional[2];
+    if (!id) fail(`usage: trellis task ${sub} <taskId> ...`);
+    if (sub === "done") { const r = await api(cfg, "PATCH", `/projects/${P}/tasks/${id}`, { status: "done" }, token); return console.log(`task ${id.slice(0, 8)} → done`); }
+    if (sub === "claim") { const r = await api(cfg, "POST", `/projects/${P}/tasks/${id}/claim`, {}, token); return console.log(`claimed ${id.slice(0, 8)} (${r.task.status})`); }
+    if (sub === "checkpoint") { if (typeof flags.note !== "string") fail('need --note "..."'); await api(cfg, "POST", `/projects/${P}/tasks/${id}/checkpoints`, { note: flags.note }, token); return console.log(`checkpointed ${id.slice(0, 8)}`); }
+    if (sub === "handoff") { if (typeof flags.to !== "string") fail("need --to <principalId>"); await api(cfg, "POST", `/projects/${P}/tasks/${id}/handoff`, { to: flags.to }, token); return console.log(`handed off ${id.slice(0, 8)}`); }
+    // update
+    const body = {};
+    if (typeof flags.status === "string") body.status = flags.status;
+    if (typeof flags.title === "string") body.title = flags.title;
+    if (typeof flags.desc === "string") body.description = flags.desc;
+    if (typeof flags.priority === "string") body.priority = flags.priority;
+    if (flags.owner !== undefined) body.owner_id = flags.owner === true ? null : flags.owner;
+    if (flags.effort !== undefined) body.effort_id = flags.effort === true ? null : flags.effort;
+    if (Object.keys(body).length === 0) fail("nothing to update — pass --status/--owner/--effort/--priority/--title/--desc");
+    const r = await api(cfg, "PATCH", `/projects/${P}/tasks/${id}`, body, token);
+    return console.log(`updated ${id.slice(0, 8)} → [${r.task.status}]`);
+  }
+
+  // create (bare `task "<title>"` or `task add "<title>"`)
+  const title = (sub === "add" ? positional.slice(2) : positional.slice(1)).join(" ").trim() || (typeof flags.title === "string" ? flags.title : "");
+  if (!title) fail('usage: trellis task "<title>" [opts]  |  trellis task update|done|claim|checkpoint|handoff <id> ...');
+  const body = { title, description: typeof flags.desc === "string" ? flags.desc : undefined, effort_id: typeof flags.effort === "string" ? flags.effort : null, owner_id: typeof flags.owner === "string" ? flags.owner : null, priority: typeof flags.priority === "string" ? flags.priority : undefined };
   if (flags.assertion) body.assertions = [].concat(flags.assertion);
-  const r = await api(cfg, "POST", `/projects/${cfg.project}/tasks`, body, token);
-  console.log(`task ${r.task.id.slice(0, 8)} created: ${r.task.title}`);
+  const r = await api(cfg, "POST", `/projects/${P}/tasks`, body, token);
+  console.log(`created ${r.task.id}  ${r.task.title}`);
 }
 
 async function cmdTasks(cfg, flags) {
@@ -333,7 +360,7 @@ async function cmdTasks(cfg, flags) {
   if (flags.owner) q.push(`owner=${flags.owner}`);
   const { tasks } = await api(cfg, "GET", `/projects/${cfg.project}/tasks${q.length ? "?" + q.join("&") : ""}`, null, token);
   if (!tasks.length) return console.log("no tasks");
-  for (const t of tasks) console.log(`  ${t.id.slice(0, 8)}  [${t.status}]  ${t.title}${t.effortTitle ? `  · ${t.effortTitle}` : ""}${t.ownerName ? `  @${t.ownerName}` : ""}`);
+  for (const t of tasks) console.log(`  ${t.id}  [${t.status}]  ${t.title}${t.effortTitle ? `  · ${t.effortTitle}` : ""}${t.ownerName ? `  @${t.ownerName}` : ""}`);
 }
 
 async function cmdStatus(cfg) {
@@ -364,6 +391,8 @@ const HELP = `trellis — report reality to a Trellis project
   trellis drifts                       open drifts (the Decide bucket)
   trellis resolve <driftId> --amend|--fix|--accept --why R
   trellis task "<title>" [--effort ID] [--owner ID] [--assertion HUMANID] [--desc T] [--priority now|normal|later]
+  trellis task update <id> [--status s] [--owner ID] [--effort ID] [--priority p] [--title T] [--desc T]
+  trellis task done|claim <id>   ·   task checkpoint <id> --note "..."   ·   task handoff <id> --to <principalId>
   trellis tasks [--status open] [--owner ID]   list tasks
   trellis show <humanId>               statement, status, facts, drifts
   trellis members                      list project members (find an agent to delegate to)
