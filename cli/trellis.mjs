@@ -363,6 +363,54 @@ async function cmdTasks(cfg, flags) {
   for (const t of tasks) console.log(`  ${t.id}  [${t.status}]  ${t.title}${t.effortTitle ? `  · ${t.effortTitle}` : ""}${t.ownerName ? `  @${t.ownerName}` : ""}`);
 }
 
+// Efforts (roadmap areas). new/update; status/owner/title/goal are fluid, but
+// changing the date or assertion scope is a decision (needs --why, and an agent
+// needs an effort.change delegation).
+async function cmdEffort(cfg, positional, flags) {
+  const token = await resolveToken(cfg, { name: flags.name });
+  const P = cfg.project;
+  const sub = positional[1];
+  if (sub === "update") {
+    const id = positional[2];
+    if (!id) fail('usage: trellis effort update <id> [--status s --owner ID --title T --goal g --target T] [--date YYYY-MM-DD --why R] [--commitment|--no-commitment] [--add HUMANID --why R] [--remove HUMANID --why R]');
+    const body = {};
+    if (typeof flags.status === "string") body.status = flags.status;
+    if (typeof flags.title === "string") body.title = flags.title;
+    if (typeof flags.goal === "string") body.goal_type = flags.goal;
+    if (flags.target !== undefined) body.goal_target = flags.target === true ? null : flags.target;
+    if (flags.owner !== undefined) body.owner_id = flags.owner === true ? null : flags.owner;
+    if (flags.commitment) body.commitment = true;
+    if (flags["no-commitment"]) body.commitment = false;
+    if (flags.date !== undefined) body.target_date = flags.date === true ? null : flags.date;
+    if (flags.add) body.add_assertions = [].concat(flags.add);
+    if (flags.remove) body.remove_assertions = [].concat(flags.remove);
+    if (typeof flags.why === "string") body.rationale = flags.why;
+    if (Object.keys(body).length === 0) fail("nothing to update — pass --status/--owner/--title/--goal/--target/--date/--commitment/--add/--remove");
+    await api(cfg, "PATCH", `/projects/${P}/efforts/${id}`, body, token);
+    return console.log(`updated effort ${id.slice(0, 8)}`);
+  }
+  const title = (sub === "new" ? positional.slice(2) : positional.slice(1)).join(" ").trim() || (typeof flags.title === "string" ? flags.title : "");
+  if (!title) fail('usage: trellis effort new "<title>" [--status s --owner ID --goal checklist|metric|open --target T --date YYYY-MM-DD --commitment --assertion HUMANID ...]');
+  const body = {
+    title, status: typeof flags.status === "string" ? flags.status : undefined,
+    goal_type: typeof flags.goal === "string" ? flags.goal : undefined, goal_target: typeof flags.target === "string" ? flags.target : undefined,
+    owner_id: typeof flags.owner === "string" ? flags.owner : null, target_date: typeof flags.date === "string" ? flags.date : null, commitment: !!flags.commitment,
+  };
+  if (flags.assertion) body.assertions = [].concat(flags.assertion);
+  const r = await api(cfg, "POST", `/projects/${P}/efforts`, body, token);
+  console.log(`created effort ${r.effort.id}  ${r.effort.title}`);
+}
+
+async function cmdEfforts(cfg) {
+  const token = await resolveToken(cfg, { allowJoin: true });
+  const { efforts } = await api(cfg, "GET", `/projects/${cfg.project}/efforts`, null, token);
+  if (!efforts.length) return console.log("no efforts");
+  for (const e of efforts) {
+    const due = e.dueSoon && e.dueInDays != null ? `  ⏰ due ${e.dueInDays}d` : e.targetDate ? `  (${e.targetDate})` : "";
+    console.log(`  ${e.id}  [${e.status}]  ${e.title}${e.ownerName ? `  @${e.ownerName}` : ""}${due}  ${e.progress.verified}/${e.progress.total}`);
+  }
+}
+
 async function cmdStatus(cfg) {
   const token = await resolveToken(cfg, { allowJoin: true });
   const efforts = (await api(cfg, "GET", `/projects/${cfg.project}/efforts`, null, token)).efforts;
@@ -390,6 +438,9 @@ const HELP = `trellis — report reality to a Trellis project
   trellis retire <humanId> --why R     retire an assertion
   trellis drifts                       open drifts (the Decide bucket)
   trellis resolve <driftId> --amend|--fix|--accept --why R
+  trellis effort new "<title>" [--status s --owner ID --goal g --target T --date YYYY-MM-DD --commitment --assertion HUMANID]
+  trellis effort update <id> [--status --owner --title --goal --target] [--date D --why R] [--commitment|--no-commitment] [--add/--remove HUMANID --why R]
+  trellis efforts                      list efforts (roadmap)
   trellis task "<title>" [--effort ID] [--owner ID] [--assertion HUMANID] [--desc T] [--priority now|normal|later]
   trellis task update <id> [--status s] [--owner ID] [--effort ID] [--priority p] [--title T] [--desc T]
   trellis task done|claim <id>   ·   task checkpoint <id> --note "..."   ·   task handoff <id> --to <principalId>
@@ -424,6 +475,8 @@ async function main() {
     case "drifts": return cmdDrifts(cfg, flags);
     case "resolve": return cmdResolve(cfg, positional, flags);
     case "show": return cmdShow(cfg, positional, flags);
+    case "effort": return cmdEffort(cfg, positional, flags);
+    case "efforts": return cmdEfforts(cfg);
     case "task": return cmdTask(cfg, positional, flags);
     case "tasks": return cmdTasks(cfg, flags);
     case "members": return cmdMembers(cfg);
