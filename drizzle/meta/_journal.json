@@ -57,6 +57,13 @@
       "when": 1783433008728,
       "tag": "0007_spec_code",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1783459376255,
+      "tag": "0008_effort_owner_commitment",
+      "breakpoints": true
     }
   ]
 }

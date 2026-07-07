@@ -387,7 +387,13 @@ export const efforts = pgTable("milestones", {
   goalType: text("goal_type").$type<"checklist" | "metric" | "open">().notNull().default("checklist"),
   goalTarget: text("goal_target"), // e.g. ">= 95% on ACORD-125" for a metric effort
   order: integer("order").notNull().default(0),
-  targetDate: date("target_date"), // optional; efforts are not date-driven
+  // Ownership is at the area level: a person owns an effort (a chunk of product)
+  // end to end. Work under it is implicitly theirs — no per-item assignment.
+  ownerId: text("owner_id").references(() => principals.id),
+  targetDate: date("target_date"), // optional; most efforts are attention-ordered, not dated
+  // A dated effort marked a commitment is a client promise — it feeds attention
+  // (surfaces ~a week ahead) rather than sitting in the someday pile.
+  commitment: boolean("commitment").notNull().default(false),
   version: integer("version").notNull().default(1),
   createdAt: createdAt(),
 });

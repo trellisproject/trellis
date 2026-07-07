@@ -5,7 +5,7 @@
 
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { assertions, decisions, effortAssertions, efforts } from "../db/schema.js";
+import { assertions, decisions, effortAssertions, efforts, principals } from "../db/schema.js";
 import { authorizeDecider } from "./decisions.js";
 
 type Result<T> = { ok: true; value: T } | { ok: false; code: string; error: string };
@@ -13,6 +13,16 @@ type Result<T> = { ok: true; value: T } | { ok: false; code: string; error: stri
 export type Progress = { verified: number; total: number };
 export type EffortStatus = "active" | "next" | "someday" | "done";
 export type GoalType = "checklist" | "metric" | "open";
+
+// A deadline feeds attention rather than replacing it: within this many days of
+// its target date, a (non-done) effort surfaces as if active and its work is
+// flagged. Most efforts have no date and are purely attention-ordered.
+export const LEAD_DAYS = 7;
+export function deadlineInfo(targetDate: string | null, status: string): { dueInDays: number | null; dueSoon: boolean } {
+  if (!targetDate) return { dueInDays: null, dueSoon: false };
+  const dueInDays = Math.ceil((new Date(targetDate + "T00:00:00Z").getTime() - Date.now()) / 86400000);
+  return { dueInDays, dueSoon: status !== "done" && dueInDays <= LEAD_DAYS };
+}
 
 async function resolveAssertionIds(projectId: string, humanIds: string[]): Promise<Result<string[]>> {
   if (humanIds.length === 0) return { ok: true, value: [] };
@@ -80,7 +90,7 @@ export async function assertionsByEffort(projectId: string): Promise<Map<string,
 
 export async function createEffort(
   projectId: string,
-  input: { title: string; status?: EffortStatus; goalType?: GoalType; goalTarget?: string | null; order?: number; targetDate?: string | null; assertions?: string[] },
+  input: { title: string; status?: EffortStatus; goalType?: GoalType; goalTarget?: string | null; order?: number; targetDate?: string | null; ownerId?: string | null; commitment?: boolean; assertions?: string[] },
 ): Promise<Result<typeof efforts.$inferSelect>> {
   const resolved = await resolveAssertionIds(projectId, input.assertions ?? []);
   if (!resolved.ok) return resolved;
@@ -95,6 +105,8 @@ export async function createEffort(
           goalTarget: input.goalTarget ?? null,
           order: input.order ?? 0,
           targetDate: input.targetDate ?? null,
+          ownerId: input.ownerId ?? null,
+          commitment: input.commitment ?? false,
         })
         .returning()
     )[0]!;
@@ -111,6 +123,8 @@ export type ChangeInput = {
   goalTarget?: string | null;
   order?: number;
   targetDate?: string | null;
+  ownerId?: string | null; // fluid — assigning an area owner is a planning move
+  commitment?: boolean;
   addAssertions?: string[];
   removeAssertions?: string[];
   decision?: { actorId: string; rationale: string; alternatives?: string[]; delegatedById?: string | null };
@@ -156,6 +170,7 @@ export async function changeEffort(projectId: string, effortId: string, input: C
         title: input.title ?? e.title, status: input.status ?? e.status,
         goalType: input.goalType ?? e.goalType, goalTarget: input.goalTarget !== undefined ? input.goalTarget : e.goalTarget,
         order: input.order ?? e.order, targetDate: input.targetDate !== undefined ? input.targetDate : e.targetDate,
+        ownerId: input.ownerId !== undefined ? input.ownerId : e.ownerId, commitment: input.commitment ?? e.commitment,
         version: e.version + 1,
       }).where(eq(efforts.id, effortId));
       return { ok: true, value: { decisionId: decision.id } };
@@ -165,18 +180,33 @@ export async function changeEffort(projectId: string, effortId: string, input: C
   await db.update(efforts).set({
     title: input.title ?? e.title, status: input.status ?? e.status,
     goalType: input.goalType ?? e.goalType, goalTarget: input.goalTarget !== undefined ? input.goalTarget : e.goalTarget,
-    order: input.order ?? e.order, version: e.version + 1,
+    order: input.order ?? e.order, ownerId: input.ownerId !== undefined ? input.ownerId : e.ownerId,
+    commitment: input.commitment ?? e.commitment, version: e.version + 1,
   }).where(eq(efforts.id, effortId));
   return { ok: true, value: { decisionId: null } };
 }
 
 const STATUS_ORDER: Record<EffortStatus, number> = { active: 0, next: 1, someday: 2, done: 3 };
 
+// Map principal id -> display name, for the owners referenced by these efforts.
+export async function ownerNames(ownerIds: (string | null)[]): Promise<Map<string, string>> {
+  const ids = [...new Set(ownerIds.filter((x): x is string => !!x))];
+  if (!ids.length) return new Map();
+  const rows = await db.select({ id: principals.id, name: principals.displayName }).from(principals).where(inArray(principals.id, ids));
+  return new Map(rows.map((r) => [r.id, r.name]));
+}
+
 export async function listEfforts(projectId: string) {
   const rows = await db.select().from(efforts).where(eq(efforts.projectId, projectId)).orderBy(asc(efforts.order));
-  const progress = await progressFor(projectId);
-  const byEffort = await assertionsByEffort(projectId);
+  const [progress, byEffort, owners] = await Promise.all([progressFor(projectId), assertionsByEffort(projectId), ownerNames(rows.map((e) => e.ownerId))]);
   return rows
-    .map((e) => ({ ...e, progress: progress.get(e.id) ?? { verified: 0, total: 0 }, assertions: byEffort.get(e.id) ?? [] }))
-    .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || a.order - b.order);
+    .map((e) => ({
+      ...e,
+      ownerName: e.ownerId ? owners.get(e.ownerId) ?? null : null,
+      ...deadlineInfo(e.targetDate, e.status),
+      progress: progress.get(e.id) ?? { verified: 0, total: 0 },
+      assertions: byEffort.get(e.id) ?? [],
+    }))
+    // A due-soon effort floats up as if active — the deadline pulls it into focus.
+    .sort((a, b) => (a.dueSoon === b.dueSoon ? STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || a.order - b.order : a.dueSoon ? -1 : 1));
 }

@@ -2,7 +2,7 @@
 import { Fragment, use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { api, type Worklist, type WorklistItem, type Priority, type Effort } from "@/lib/api";
+import { api, type Worklist, type WorklistItem, type Priority, type Effort, type Member } from "@/lib/api";
 import { AssertionPickerModal } from "@/components/AssertionPickerModal";
 
 const BUCKETS: { key: string; label: string; blurb: string }[] = [
@@ -27,15 +27,17 @@ export default function WorklistPage({ params }: { params: Promise<{ pid: string
   const [wl, setWl] = useState<Worklist | null>(null);
   const [action, setAction] = useState<Action | null>(null);
   const [efforts, setEfforts] = useState<Effort[]>([]);
-  const [scope, setScope] = useState<string>("all"); // "all" or an effort id
+  const [members, setMembers] = useState<Member[]>([]);
+  const [scope, setScope] = useState<string>("all"); // "all" | "effort:<id>" | "owner:<id>"
 
   async function load() {
-    const q = scope === "all" ? "" : `?effort=${scope}`;
+    const q = scope.startsWith("effort:") ? `?effort=${scope.slice(7)}` : scope.startsWith("owner:") ? `?owner=${scope.slice(6)}` : "";
     setWl(await api.get<Worklist>(`/projects/${pid}/worklist${q}`));
   }
   useEffect(() => { load(); }, [pid, scope]);
   useEffect(() => {
     api.get<{ efforts: Effort[] }>(`/projects/${pid}/efforts`).then((d) => setEfforts(d.efforts)).catch(() => {});
+    api.get<{ members: Member[] }>(`/projects/${pid}/members`).then((d) => setMembers(d.members)).catch(() => {});
   }, [pid]);
 
   function onAct(item: WorklistItem) {
@@ -64,7 +66,8 @@ export default function WorklistPage({ params }: { params: Promise<{ pid: string
         <span className="sub">{total === 0 ? "All clear." : `${total} item${total === 1 ? "" : "s"}, highest priority first`}</span>
         <select className="mini-select" style={{ marginLeft: "auto" }} value={scope} onChange={(e) => setScope(e.target.value)}>
           <option value="all">All work</option>
-          {efforts.map((e) => <option key={e.id} value={e.id}>{e.status === "active" ? "★ " : ""}{e.title}</option>)}
+          {efforts.length > 0 && <optgroup label="By effort">{efforts.map((e) => <option key={e.id} value={`effort:${e.id}`}>{e.status === "active" ? "★ " : ""}{e.dueSoon ? "⏰ " : ""}{e.title}</option>)}</optgroup>}
+          {members.length > 0 && <optgroup label="By owner">{members.map((m) => <option key={m.principalId} value={`owner:${m.principalId}`}>{m.name}</option>)}</optgroup>}
         </select>
       </div>
       <div className="content">
@@ -91,6 +94,12 @@ export default function WorklistPage({ params }: { params: Promise<{ pid: string
                       </div>
                     )}
                     <div className="flex">
+                      {item.dueInDays != null && item.dueInDays <= 7 && (
+                        <span className="pill" title={item.commitment ? "client commitment" : "due soon"} style={{ color: item.commitment ? "var(--red)" : "var(--muted)", borderColor: item.commitment ? "var(--red)" : undefined, whiteSpace: "nowrap" }}>
+                          {item.commitment ? "⏰ " : ""}{item.dueInDays <= 0 ? "due now" : `due ${item.dueInDays}d`}
+                        </span>
+                      )}
+                      {item.owner && <span className="mutedtext" style={{ fontSize: 12, whiteSpace: "nowrap" }}>{item.owner}</span>}
                       {(item.kind === "drift" || item.kind === "request") && (
                         <select className="mini-select" value={item.priority} onChange={(e) => setPriority(item, e.target.value as Priority)} title="Priority">
                           <option value="now">now</option>

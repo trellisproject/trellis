@@ -42,9 +42,15 @@ export type Effort = {
   goalType: "checklist" | "metric" | "open";
   goalTarget: string | null;
   targetDate: string | null;
+  ownerId: string | null;
+  ownerName: string | null;
+  commitment: boolean;
+  dueInDays: number | null;
+  dueSoon: boolean;
   progress: { verified: number; total: number };
   assertions: EffortAssertion[];
 };
+export type Member = { principalId: string; name: string; kind: "human" | "agent"; role: string };
 export type LinkedFact = { relation: "supports" | "contradicts"; id: string; statement: string; observerId: string; evidence: { type: string; ref: string }[]; observedAt: string };
 export type StatusEvent = { id: string; status: AssertionStatus; note: string | null; at: string };
 export type AssertionDetail = {
@@ -58,7 +64,7 @@ export type AssertionDetail = {
 };
 export type TaskDetail = { task: Task; assertions: string[]; checkpoints: { id: string; note: string; at: string }[]; dependsOn: string[] };
 export type Priority = "now" | "normal" | "later";
-export type WorklistItem = { bucket: string; kind: "drift" | "challenge" | "request" | "assertion"; id: string; ref: string; title: string; priority: Priority; action: string };
+export type WorklistItem = { bucket: string; kind: "drift" | "challenge" | "request" | "assertion"; id: string; ref: string; title: string; priority: Priority; action: string; owner?: string | null; dueInDays?: number | null; commitment?: boolean };
 export type Worklist = { buckets: Record<string, WorklistItem[]>; counts: Record<string, number> };
 export type Decision = { id: string; onType: string; onId: string; choice: string; rationale: string; at: string };
 export type Fact = { id: string; key: string; statement: string; observerId: string; evidence: { type: string; ref: string }[]; observedAt: string; metricKey: string | null; measuredValue: number | null };

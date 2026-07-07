@@ -22,6 +22,8 @@ const createBody = z.object({
   goal_target: z.string().nullable().optional(),
   order: z.number().int().optional(),
   target_date: z.string().nullable().optional(),
+  owner_id: z.string().nullable().optional(),
+  commitment: z.boolean().optional(),
   assertions: z.array(z.string()).optional(),
 });
 
@@ -33,7 +35,7 @@ effortRoutes.post("/projects/:pid/efforts", async (c) => {
   if (!b.success) return c.json({ error: "Invalid body", code: "INVALID_INPUT", issues: b.error.issues }, 422);
   const r = await createEffort(c.req.param("pid"), {
     title: b.data.title, status: b.data.status, goalType: b.data.goal_type, goalTarget: b.data.goal_target,
-    order: b.data.order, targetDate: b.data.target_date, assertions: b.data.assertions,
+    order: b.data.order, targetDate: b.data.target_date, ownerId: b.data.owner_id, commitment: b.data.commitment, assertions: b.data.assertions,
   });
   if (!r.ok) return c.json({ error: r.error, code: r.code }, st(r.code));
   return c.json({ effort: r.value }, 201);
@@ -53,6 +55,8 @@ const patchBody = z.object({
   goal_target: z.string().nullable().optional(),
   order: z.number().int().optional(),
   target_date: z.string().nullable().optional(),
+  owner_id: z.string().nullable().optional(),
+  commitment: z.boolean().optional(),
   add_assertions: z.array(z.string()).optional(),
   remove_assertions: z.array(z.string()).optional(),
   rationale: z.string().optional(),
@@ -68,7 +72,8 @@ effortRoutes.patch("/projects/:pid/efforts/:eid", async (c) => {
   if (!b.success) return c.json({ error: "Invalid body", code: "INVALID_INPUT" }, 422);
   const r = await changeEffort(c.req.param("pid"), c.req.param("eid"), {
     title: b.data.title, status: b.data.status, goalType: b.data.goal_type, goalTarget: b.data.goal_target,
-    order: b.data.order, targetDate: b.data.target_date, addAssertions: b.data.add_assertions, removeAssertions: b.data.remove_assertions,
+    order: b.data.order, targetDate: b.data.target_date, ownerId: b.data.owner_id, commitment: b.data.commitment,
+    addAssertions: b.data.add_assertions, removeAssertions: b.data.remove_assertions,
     decision: b.data.rationale !== undefined ? { actorId: m.principalId, rationale: b.data.rationale, alternatives: b.data.alternatives, delegatedById: b.data.delegated_by ?? null } : undefined,
   });
   if (!r.ok) return c.json({ error: r.error, code: r.code }, st(r.code));
