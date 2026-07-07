@@ -9,7 +9,7 @@ const BUCKETS: { key: string; label: string; blurb: string }[] = [
   { key: "decide", label: "Decide", blurb: "A judgment is owed — drifts, challenges, new requests" },
   { key: "specify", label: "Specify", blurb: "Accepted requests to turn into intent" },
   { key: "agree", label: "Agree", blurb: "Proposed assertions to review" },
-  { key: "build", label: "Build", blurb: "Agreed intent with no task yet" },
+  { key: "build", label: "Reconcile", blurb: "Agreed intent, not yet confirmed by a fact — build it, or check the code that already ships it" },
   { key: "verify", label: "Verify", blurb: "Built, awaiting a verifying fact" },
 ];
 
