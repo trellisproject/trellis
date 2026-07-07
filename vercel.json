@@ -1,5 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "if [ \"$VERCEL_ENV\" = \"production\" ]; then node scripts/migrate.mjs; else echo 'skip migrate (non-production build)'; fi",
   "rewrites": [{ "source": "/(.*)", "destination": "/api" }]
 }
