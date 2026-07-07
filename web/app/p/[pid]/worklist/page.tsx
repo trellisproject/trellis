@@ -10,6 +10,7 @@ const BUCKETS: { key: string; label: string; blurb: string }[] = [
   { key: "specify", label: "Specify", blurb: "Accepted requests to turn into intent" },
   { key: "agree", label: "Agree", blurb: "Proposed assertions to review" },
   { key: "build", label: "Reconcile", blurb: "Agreed intent, not yet confirmed by a fact — build it, or check the code that already ships it" },
+  { key: "do", label: "Do", blurb: "Open tasks — the work itself, including standalone operational tasks" },
   { key: "verify", label: "Verify", blurb: "Built, awaiting a verifying fact" },
 ];
 
@@ -47,6 +48,7 @@ export default function WorklistPage({ params }: { params: Promise<{ pid: string
     if (item.bucket === "agree") return setAction({ type: "agree", item });
     if (item.bucket === "build") return setAction({ type: "create-task", item });
     if (item.bucket === "specify") return setAction({ type: "link-assertions", item });
+    if (item.bucket === "do") return router.push(`/p/${pid}/t/${item.id}`);
     if (item.bucket === "verify") return router.push(`/p/${pid}/a/${item.ref}`);
   }
 
@@ -80,8 +82,8 @@ export default function WorklistPage({ params }: { params: Promise<{ pid: string
               <div className="card">
                 {items.map((item) => (
                   <div key={`${item.kind}-${item.id}`} className="row between">
-                    {item.kind === "assertion" ? (
-                      <Link href={`/p/${pid}/a/${item.ref}`} className="flex" style={{ minWidth: 0 }} title="Open detail">
+                    {item.kind === "assertion" || item.kind === "task" ? (
+                      <Link href={item.kind === "task" ? `/p/${pid}/t/${item.id}` : `/p/${pid}/a/${item.ref}`} className="flex" style={{ minWidth: 0 }} title="Open detail">
                         <PriorityDot p={item.priority} />
                         <span className="aid">{item.ref}</span>
                         <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</span>

@@ -314,6 +314,28 @@ async function cmdMembers(cfg) {
   for (const m of members) console.log(`  ${m.principalId}  ${m.kind.padEnd(5)} ${m.role.padEnd(9)} ${m.name}`);
 }
 
+// Create a task — standalone by default; --assertion links it to intent,
+// --effort files it under an area (owner + deadline flow from there).
+async function cmdTask(cfg, positional, flags) {
+  const title = positional.slice(1).join(" ").trim() || (typeof flags.title === "string" ? flags.title : "");
+  if (!title) fail('usage: trellis task "<title>" [--effort ID] [--owner ID] [--assertion HUMANID] [--desc TEXT] [--priority now|normal|later]');
+  const token = await resolveToken(cfg, { name: flags.name });
+  const body = { title, description: flags.desc, effort_id: flags.effort || null, owner_id: flags.owner || null, priority: flags.priority };
+  if (flags.assertion) body.assertions = [].concat(flags.assertion);
+  const r = await api(cfg, "POST", `/projects/${cfg.project}/tasks`, body, token);
+  console.log(`task ${r.task.id.slice(0, 8)} created: ${r.task.title}`);
+}
+
+async function cmdTasks(cfg, flags) {
+  const token = await resolveToken(cfg, { allowJoin: true });
+  const q = [];
+  if (flags.status) q.push(`status=${flags.status}`);
+  if (flags.owner) q.push(`owner=${flags.owner}`);
+  const { tasks } = await api(cfg, "GET", `/projects/${cfg.project}/tasks${q.length ? "?" + q.join("&") : ""}`, null, token);
+  if (!tasks.length) return console.log("no tasks");
+  for (const t of tasks) console.log(`  ${t.id.slice(0, 8)}  [${t.status}]  ${t.title}${t.effortTitle ? `  · ${t.effortTitle}` : ""}${t.ownerName ? `  @${t.ownerName}` : ""}`);
+}
+
 async function cmdStatus(cfg) {
   const token = await resolveToken(cfg, { allowJoin: true });
   const efforts = (await api(cfg, "GET", `/projects/${cfg.project}/efforts`, null, token)).efforts;
@@ -341,6 +363,8 @@ const HELP = `trellis — report reality to a Trellis project
   trellis retire <humanId> --why R     retire an assertion
   trellis drifts                       open drifts (the Decide bucket)
   trellis resolve <driftId> --amend|--fix|--accept --why R
+  trellis task "<title>" [--effort ID] [--owner ID] [--assertion HUMANID] [--desc T] [--priority now|normal|later]
+  trellis tasks [--status open] [--owner ID]   list tasks
   trellis show <humanId>               statement, status, facts, drifts
   trellis members                      list project members (find an agent to delegate to)
   trellis delegate <agent> --classes assertion.agree,assertion.retire,drift.resolve   (operator; or --all)
@@ -371,6 +395,8 @@ async function main() {
     case "drifts": return cmdDrifts(cfg, flags);
     case "resolve": return cmdResolve(cfg, positional, flags);
     case "show": return cmdShow(cfg, positional, flags);
+    case "task": return cmdTask(cfg, positional, flags);
+    case "tasks": return cmdTasks(cfg, flags);
     case "members": return cmdMembers(cfg);
     case "delegate": return cmdDelegate(cfg, positional, flags);
     case "delegations": return cmdDelegations(cfg);

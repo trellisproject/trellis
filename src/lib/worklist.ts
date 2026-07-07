@@ -4,15 +4,15 @@
 
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { assertions, challenges, drifts, effortAssertions, efforts, requests } from "../db/schema.js";
+import { assertions, challenges, drifts, effortAssertions, efforts, requests, tasks } from "../db/schema.js";
 import { deadlineInfo, LEAD_DAYS, ownerNames } from "./efforts.js";
 
 export type Priority = "now" | "normal" | "later";
-export type Bucket = "decide" | "specify" | "agree" | "build" | "verify";
+export type Bucket = "decide" | "specify" | "agree" | "build" | "do" | "verify";
 
 export type WorklistItem = {
   bucket: Bucket;
-  kind: "drift" | "challenge" | "request" | "assertion";
+  kind: "drift" | "challenge" | "request" | "assertion" | "task";
   id: string;
   ref: string; // human id or short id for display
   title: string;
@@ -121,6 +121,27 @@ export async function worklist(projectId: string, opts?: { effortId?: string; ow
   `)) as unknown as { human_id: string; title: string }[];
   const build: WorklistItem[] = agreedNoTask.filter((a) => inH(a.human_id)).map((a) => withMeta({ bucket: "build", kind: "assertion", id: a.human_id, ref: a.human_id, title: a.title, priority: "normal", action: "Create task" }, metaByHuman.get(a.human_id)));
 
+  // DO — open work: tasks to be done (build, fix, or standalone operational work
+  // with no assertion). Owner + deadline come from the task's own owner/effort,
+  // else its effort's owner/deadline. This is where created tasks live until done.
+  const openTasks = await db
+    .select({
+      id: tasks.id, title: tasks.title, priority: tasks.priority,
+      taskOwnerId: tasks.ownerId, effortId: tasks.effortId,
+      effortStatus: efforts.status, effortOwnerId: efforts.ownerId, targetDate: efforts.targetDate, commitment: efforts.commitment,
+    })
+    .from(tasks)
+    .leftJoin(efforts, eq(efforts.id, tasks.effortId))
+    .where(and(eq(tasks.projectId, projectId), inArray(tasks.status, ["open", "claimed", "in_progress"])));
+  const taskOwners = await ownerNames(openTasks.flatMap((t) => [t.taskOwnerId, t.effortOwnerId]));
+  const doItems: WorklistItem[] = openTasks
+    .filter((t) => (opts?.effortId ? t.effortId === opts.effortId : opts?.ownerId ? t.taskOwnerId === opts.ownerId || t.effortOwnerId === opts.ownerId : true))
+    .map((t) => {
+      const ownerId = t.taskOwnerId ?? t.effortOwnerId;
+      const dl = deadlineInfo(t.targetDate, t.effortStatus ?? "next");
+      return { bucket: "do" as const, kind: "task" as const, id: t.id, ref: "task", title: t.title, priority: t.priority, action: "Open", owner: ownerId ? taskOwners.get(ownerId) ?? null : null, dueInDays: dl.dueInDays, commitment: t.commitment ?? false };
+    });
+
   // VERIFY — implemented assertions awaiting a verifying fact (the checker's queue).
   const implemented = (await db.select().from(assertions).where(and(eq(assertions.projectId, projectId), eq(assertions.status, "implemented")))).filter((a) => inH(a.humanId));
   const verify: WorklistItem[] = implemented.map((a) => withMeta({ bucket: "verify", kind: "assertion", id: a.humanId, ref: a.humanId, title: a.title, priority: "normal", action: "Verify" }, metaByHuman.get(a.humanId)));
@@ -130,6 +151,7 @@ export async function worklist(projectId: string, opts?: { effortId?: string; ow
     specify: sortItems(specify),
     agree: sortItems(agree),
     build: sortItems(build),
+    do: sortItems(doItems),
     verify: sortItems(verify),
   };
 }

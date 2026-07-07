@@ -28,7 +28,7 @@ async function isMember(projectId: string, principalId: string): Promise<boolean
 
 export async function createTask(
   projectId: string,
-  input: { title: string; assertions?: string[]; driftId?: string | null; dependsOn?: string[] },
+  input: { title: string; description?: string; assertions?: string[]; driftId?: string | null; dependsOn?: string[]; effortId?: string | null; ownerId?: string | null; priority?: "now" | "normal" | "later" },
 ): Promise<Result<typeof tasks.$inferSelect>> {
   // resolve assertion links by human id (TRL-CORE-014)
   let assertionIds: string[] = [];
@@ -49,7 +49,7 @@ export async function createTask(
 
   const task = await db.transaction(async (tx) => {
     const t = (
-      await tx.insert(tasks).values({ projectId, title: input.title, driftId: input.driftId ?? null }).returning()
+      await tx.insert(tasks).values({ projectId, title: input.title, description: input.description ?? "", driftId: input.driftId ?? null, effortId: input.effortId ?? null, ownerId: input.ownerId ?? null, priority: input.priority ?? "normal" }).returning()
     )[0]!;
     for (const aid of assertionIds) await tx.insert(taskAssertions).values({ taskId: t.id, assertionId: aid });
     for (const dep of input.dependsOn ?? []) {
@@ -124,7 +124,7 @@ export async function handoffTask(
 export async function updateTaskStatus(
   projectId: string,
   taskId: string,
-  input: { status?: TaskStatus; title?: string; priority?: "now" | "normal" | "later"; version?: number },
+  input: { status?: TaskStatus; title?: string; description?: string; priority?: "now" | "normal" | "later"; ownerId?: string | null; effortId?: string | null; version?: number },
 ): Promise<Result<typeof tasks.$inferSelect>> {
   const task = (await db.select().from(tasks).where(eq(tasks.id, taskId)))[0];
   if (!task || task.projectId !== projectId) return { ok: false, code: "NOT_FOUND", error: "Task not found" };
@@ -138,7 +138,10 @@ export async function updateTaskStatus(
       .set({
         status: input.status ?? task.status,
         title: input.title ?? task.title,
+        description: input.description ?? task.description,
         priority: input.priority ?? task.priority,
+        ownerId: input.ownerId !== undefined ? input.ownerId : task.ownerId,
+        effortId: input.effortId !== undefined ? input.effortId : task.effortId,
         version: task.version + 1,
         updatedAt: new Date(),
       })

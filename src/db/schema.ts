@@ -284,6 +284,7 @@ export const tasks = pgTable(
       .references(() => projects.id)
       .notNull(),
     title: text("title").notNull(),
+    description: text("description").default("").notNull(), // free-text detail (markdown)
     status: text("status")
       .$type<"open" | "claimed" | "in_progress" | "done" | "blocked">()
       .notNull()
@@ -291,6 +292,10 @@ export const tasks = pgTable(
     priority: text("priority").$type<"now" | "normal" | "later">().notNull().default("normal"),
     ownerId: text("owner_id").references(() => principals.id),
     driftId: text("drift_id").references(() => drifts.id),
+    // A task belongs to an area (effort). Work — including standalone
+    // operational tasks with no assertion — lives under an effort and inherits
+    // its owner and deadline. Nullable: an unfiled task is still valid.
+    effortId: text("effort_id").references(() => efforts.id),
     version: integer("version").notNull().default(1),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
