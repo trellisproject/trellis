@@ -43,3 +43,9 @@ export type TaskDetail = { task: Task; assertions: string[]; checkpoints: { id: 
 export type Decision = { id: string; onType: string; onId: string; choice: string; rationale: string; at: string };
 export type Fact = { id: string; key: string; statement: string; observerId: string; evidence: { type: string; ref: string }[]; observedAt: string };
 export type Task = { id: string; title: string; status: string; ownerId: string | null };
+export type Request = {
+  id: string; title: string; body: string; requester: string; source: string | null;
+  status: "new" | "accepted" | "declined";
+  derived: { humanId: string; title: string; status: AssertionStatus }[];
+  shipped: boolean;
+};

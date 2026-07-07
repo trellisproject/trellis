@@ -8,6 +8,7 @@ import { getSession, clearSession } from "@/lib/store";
 
 const NAV = [
   { seg: "triage", label: "Triage" },
+  { seg: "requests", label: "Requests" },
   { seg: "specs", label: "Specs" },
   { seg: "roadmap", label: "Roadmap" },
   { seg: "facts", label: "Facts" },

@@ -97,6 +97,12 @@ async function main() {
   // Roadmap.
   await api("POST", `/projects/${pid}/milestones`, { token: tok, body: { title: "v1 launch", target_date: "2026-08-15", assertions: ["PAY-API-001", "PAY-API-002", "PAY-API-003", "PAY-API-004", "PAY-API-005", "PAY-API-006"] } });
 
+  // Requests: one accepted + linked to shipped intent, one still new.
+  const reqA = await api("POST", `/projects/${pid}/requests`, { token: tok, body: { title: "Idempotent charges so retries don't double-bill", requester: "customer: Northwind", source: "email" } });
+  await api("POST", `/projects/${pid}/requests/${reqA.request.id}/decide`, { token: tok, body: { choice: "accept", rationale: "Core reliability need — clear scope" } });
+  await api("POST", `/projects/${pid}/requests/${reqA.request.id}/assertions`, { token: tok, body: { assertions: ["PAY-API-001"] } });
+  await api("POST", `/projects/${pid}/requests`, { token: tok, body: { title: "Partial refunds by line item", requester: "customer: Contoso", source: "sales call" } });
+
   console.log(JSON.stringify({ url: BASE, project: pid, token: tok }, null, 2));
 }
 

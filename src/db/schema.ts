@@ -320,7 +320,7 @@ export const decisions = pgTable("decisions", {
   actorId: text("actor_id")
     .references(() => principals.id)
     .notNull(),
-  onType: text("on_type").$type<"assertion" | "drift" | "challenge" | "milestone">().notNull(),
+  onType: text("on_type").$type<"assertion" | "drift" | "challenge" | "milestone" | "request">().notNull(),
   onId: text("on_id").notNull(),
   choice: text("choice").notNull(), // agree|retire|amend|fix|accept|uphold|supersede|scope|date
   rationale: text("rationale").notNull(), // TRL-CORE-018: non-empty enforced in app
@@ -368,6 +368,34 @@ export const milestoneAssertions = pgTable("milestone_assertions", {
   id: id(),
   milestoneId: text("milestone_id")
     .references(() => milestones.id)
+    .notNull(),
+  assertionId: text("assertion_id")
+    .references(() => assertions.id)
+    .notNull(),
+});
+
+// --- Requests (TRL-CORE-030..033) — captured asks, the origin of intent ----
+
+export const requests = pgTable("requests", {
+  id: id(),
+  projectId: text("project_id")
+    .references(() => projects.id)
+    .notNull(),
+  title: text("title").notNull(),
+  body: text("body").default("").notNull(),
+  requester: text("requester").notNull(), // who asked — "customer: Acme", a name, etc.
+  source: text("source"), // email | slack | meeting | customer | ...
+  status: text("status").$type<"new" | "accepted" | "declined">().notNull().default("new"),
+  decisionId: text("decision_id"), // the accept/decline decision
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+// Assertions derived from a request (TRL-CORE-032).
+export const requestAssertions = pgTable("request_assertions", {
+  id: id(),
+  requestId: text("request_id")
+    .references(() => requests.id)
     .notNull(),
   assertionId: text("assertion_id")
     .references(() => assertions.id)
