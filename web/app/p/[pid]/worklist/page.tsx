@@ -1,5 +1,5 @@
 "use client";
-import { use, useEffect, useState } from "react";
+import { Fragment, use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, type Worklist, type WorklistItem, type Priority } from "@/lib/api";
 
@@ -59,7 +59,7 @@ export default function WorklistPage({ params }: { params: Promise<{ pid: string
           const items = wl.buckets[b.key] ?? [];
           if (items.length === 0) return null;
           return (
-            <div key={b.key}>
+            <Fragment key={b.key}>
               <div className="section-label">{b.label} · {items.length}<span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0, marginLeft: 8, opacity: 0.7 }}>{b.blurb}</span></div>
               <div className="card">
                 {items.map((item) => (
@@ -82,7 +82,7 @@ export default function WorklistPage({ params }: { params: Promise<{ pid: string
                   </div>
                 ))}
               </div>
-            </div>
+            </Fragment>
           );
         })}
         {wl && total === 0 && <div className="card"><div className="empty">Nothing needs action. Intent and reality agree, and everything agreed is built and verified. ✓</div></div>}
