@@ -7,7 +7,7 @@ type Project = { id: string; name: string };
 
 export default function Connect() {
   const router = useRouter();
-  const [apiUrl, setApiUrl] = useState("http://localhost:8787");
+  const [apiUrl, setApiUrl] = useState(process.env.NEXT_PUBLIC_TRELLIS_API || "http://localhost:8787");
   const [token, setToken] = useState("");
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [error, setError] = useState("");
