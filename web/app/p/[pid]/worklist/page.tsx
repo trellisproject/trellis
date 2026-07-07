@@ -1,6 +1,7 @@
 "use client";
 import { Fragment, use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { api, type Worklist, type WorklistItem, type Priority, type Effort } from "@/lib/api";
 import { AssertionPickerModal } from "@/components/AssertionPickerModal";
 
@@ -76,11 +77,19 @@ export default function WorklistPage({ params }: { params: Promise<{ pid: string
               <div className="card">
                 {items.map((item) => (
                   <div key={`${item.kind}-${item.id}`} className="row between">
-                    <div className="flex" style={{ minWidth: 0 }}>
-                      <PriorityDot p={item.priority} />
-                      <span className="aid">{item.ref}</span>
-                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</span>
-                    </div>
+                    {item.kind === "assertion" ? (
+                      <Link href={`/p/${pid}/a/${item.ref}`} className="flex" style={{ minWidth: 0 }} title="Open detail">
+                        <PriorityDot p={item.priority} />
+                        <span className="aid">{item.ref}</span>
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</span>
+                      </Link>
+                    ) : (
+                      <div className="flex" style={{ minWidth: 0 }}>
+                        <PriorityDot p={item.priority} />
+                        <span className="aid">{item.ref}</span>
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</span>
+                      </div>
+                    )}
                     <div className="flex">
                       {(item.kind === "drift" || item.kind === "request") && (
                         <select className="mini-select" value={item.priority} onChange={(e) => setPriority(item, e.target.value as Priority)} title="Priority">
@@ -158,6 +167,7 @@ function ActionModal({ pid, action, onClose, onDone }: { pid: string; action: Mo
   return (
     <div className="modal-backdrop" onClick={onClose}><div className="modal" onClick={(e) => e.stopPropagation()}>
       <h3>{cfg.title(action.item)}</h3>
+      <div className="mutedtext" style={{ fontSize: 13, marginTop: -4, marginBottom: 12 }}>{action.item.title}{action.item.kind === "assertion" && <> · <a href={`/p/${pid}/a/${action.item.ref}`} target="_blank" rel="noreferrer">open detail ↗</a></>}</div>
       {action.type === "create-task" ? (
         <>
           <label>Task title</label>

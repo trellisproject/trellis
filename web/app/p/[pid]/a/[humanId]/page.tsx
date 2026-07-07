@@ -3,18 +3,22 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { api, metricLabel, type AssertionDetail } from "@/lib/api";
 import { Badge } from "@/components/Badge";
+import { RationaleModal } from "@/components/RationaleModal";
 
 export default function AssertionHub({ params }: { params: Promise<{ pid: string; humanId: string }> }) {
   const { pid, humanId } = use(params);
   const [d, setD] = useState<AssertionDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    api.get<AssertionDetail>(`/projects/${pid}/assertions/${humanId}`).then((r) => { setD(r); setLoading(false); }).catch(() => setLoading(false));
-  }, [pid, humanId]);
+  const [decide, setDecide] = useState<"agree" | "retire" | null>(null);
+  function load() {
+    return api.get<AssertionDetail>(`/projects/${pid}/assertions/${humanId}`).then((r) => { setD(r); setLoading(false); }).catch(() => setLoading(false));
+  }
+  useEffect(() => { load(); }, [pid, humanId]);
 
   if (loading) return <div className="content"><div className="empty">Loading…</div></div>;
   if (!d) return <div className="content"><div className="empty">Assertion not found.</div></div>;
   const a = d.assertion;
+  const live = a.status !== "retired";
 
   return (
     <>
@@ -22,7 +26,21 @@ export default function AssertionHub({ params }: { params: Promise<{ pid: string
         <Link href={`/p/${pid}/specs`} className="mutedtext" style={{ fontSize: 13 }}>← Specs</Link>
         <h1 style={{ marginLeft: 8 }}><span className="aid" style={{ marginRight: 10 }}>{a.humanId}</span>{a.title}</h1>
         <Badge status={a.status} />
+        <div className="flex" style={{ marginLeft: "auto" }}>
+          {a.status === "proposed" && <button className="btn primary" onClick={() => setDecide("agree")}>Agree</button>}
+          {live && <button className="btn ghost" onClick={() => setDecide("retire")}>Retire</button>}
+        </div>
       </div>
+      {decide && (
+        <RationaleModal
+          title={decide === "agree" ? `Agree ${a.humanId}` : `Retire ${a.humanId}`}
+          body={<><strong>{a.title}</strong><div style={{ marginTop: 6 }}>{a.statement}</div></>}
+          confirmLabel={decide === "agree" ? "Agree" : "Retire"}
+          placeholder={decide === "agree" ? "Reviewed against the source — faithful and correct." : "Why retire this?"}
+          onClose={() => setDecide(null)}
+          onConfirm={async (rationale) => { await api.post(`/projects/${pid}/assertions/${a.humanId}/${decide}`, { rationale }); setDecide(null); await load(); }}
+        />
+      )}
       <div className="content">
         <div className="card"><div className="row">
           <div className="section-label" style={{ marginTop: 0 }}>Statement · authored in Trellis, mirrored to git · edit on the spec page</div>

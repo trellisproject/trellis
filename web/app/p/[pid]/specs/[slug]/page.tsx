@@ -3,6 +3,7 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { api, metricLabel, type Assertion, type Spec } from "@/lib/api";
 import { Badge } from "@/components/Badge";
+import { RationaleModal } from "@/components/RationaleModal";
 
 export default function SpecDetail({ params }: { params: Promise<{ pid: string; slug: string }> }) {
   const { pid, slug } = use(params);
@@ -10,20 +11,46 @@ export default function SpecDetail({ params }: { params: Promise<{ pid: string; 
   const [assertions, setAssertions] = useState<Assertion[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Assertion | "new" | null>(null);
+  const [decide, setDecide] = useState<{ verb: "agree" | "retire"; a: Assertion } | null>(null);
+  const [bulk, setBulk] = useState(false);
 
   async function load() {
     const d = await api.get<{ spec: Spec; assertions: Assertion[] }>(`/projects/${pid}/specs/${slug}`);
     setSpec(d.spec); setAssertions(d.assertions); setLoading(false);
   }
   useEffect(() => { load(); }, [pid, slug]);
+  const proposed = assertions.filter((a) => a.status === "proposed");
 
   return (
     <>
       <div className="topbar">
         <h1>{spec?.title ?? slug}</h1>
         <span className="sub">{assertions.length} assertions · authored here, mirrored to git</span>
-        <button className="btn" style={{ marginLeft: "auto" }} onClick={() => setEditing("new")}>+ New assertion</button>
+        <div className="flex" style={{ marginLeft: "auto" }}>
+          {proposed.length > 0 && <button className="btn primary" onClick={() => setBulk(true)}>Agree all proposed ({proposed.length})</button>}
+          <button className="btn" onClick={() => setEditing("new")}>+ New assertion</button>
+        </div>
       </div>
+      {decide && (
+        <RationaleModal
+          title={decide.verb === "agree" ? `Agree ${decide.a.humanId}` : `Retire ${decide.a.humanId}`}
+          body={<><strong>{decide.a.title}</strong><div style={{ marginTop: 6 }}>{decide.a.statement}</div></>}
+          confirmLabel={decide.verb === "agree" ? "Agree" : "Retire"}
+          placeholder={decide.verb === "agree" ? "Reviewed against the source — faithful and correct." : "Why retire this?"}
+          onClose={() => setDecide(null)}
+          onConfirm={async (rationale) => { await api.post(`/projects/${pid}/assertions/${decide.a.humanId}/${decide.verb}`, { rationale }); setDecide(null); setLoading(true); await load(); }}
+        />
+      )}
+      {bulk && (
+        <RationaleModal
+          title={`Agree all ${proposed.length} proposed assertions`}
+          body={<div className="mutedtext">One rationale is recorded on each. Use per-assertion Agree instead if any need a distinct reason.</div>}
+          confirmLabel={`Agree ${proposed.length}`}
+          placeholder="Reviewed the distillation against the source spec — faithful and correct."
+          onClose={() => setBulk(false)}
+          onConfirm={async (rationale) => { for (const a of proposed) await api.post(`/projects/${pid}/assertions/${a.humanId}/agree`, { rationale }); setBulk(false); setLoading(true); await load(); }}
+        />
+      )}
       <div className="content">
         {loading ? <div className="empty">Loading…</div> : (
           <div className="card">
@@ -35,7 +62,9 @@ export default function SpecDetail({ params }: { params: Promise<{ pid: string; 
                   <div className="flex">
                     {a.metricKey && <span className="pill mono" style={{ color: "var(--violet)" }}>{metricLabel(a)}</span>}
                     <Badge status={a.status} />
+                    {a.status === "proposed" && <button className="mini-select" style={{ color: "var(--green)" }} onClick={() => setDecide({ verb: "agree", a })}>agree</button>}
                     <button className="mini-select" onClick={() => setEditing(a)}>edit</button>
+                    {a.status !== "retired" && <button className="mini-select" onClick={() => setDecide({ verb: "retire", a })}>retire</button>}
                   </div>
                 </div>
                 <div className="mutedtext" style={{ fontSize: 13, marginTop: 6 }}>{a.statement}</div>
