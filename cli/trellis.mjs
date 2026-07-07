@@ -198,6 +198,90 @@ async function cmdIngest(cfg, positional, flags) {
   console.log(`ingested ${slug}: ${r.created.length} created, ${r.statementsUpdated.length} updated, ${r.retired.length} retired`);
 }
 
+// Author intent: create a spec, or list one's assertions.
+async function cmdSpec(cfg, positional, flags) {
+  const token = await resolveToken(cfg, { name: flags.name });
+  if (positional[1] === "new") {
+    const slug = positional[2];
+    if (!slug || typeof flags.title !== "string" || typeof flags.code !== "string") fail("usage: trellis spec new <slug> --title T --code CODE");
+    const r = await api(cfg, "POST", `/projects/${cfg.project}/specs`, { slug, title: flags.title, code: flags.code }, token);
+    console.log(`created spec ${r.spec.slug} (${r.spec.code})`);
+    return;
+  }
+  const slug = positional[1];
+  if (!slug) fail("usage: trellis spec <slug> | trellis spec new <slug> --title T --code CODE");
+  const { spec, assertions } = await api(cfg, "GET", `/projects/${cfg.project}/specs/${slug}`, null, token);
+  console.log(`${spec.title} — ${assertions.length} assertions`);
+  for (const a of assertions) console.log(`  ${a.humanId}  [${a.status}]  ${a.title}`);
+}
+
+// Author intent: add or edit an assertion. --metric "key >= 95%" sets a metric;
+// on edit, --metric "" clears it, omitting it leaves it unchanged.
+async function cmdAssert(cfg, positional, flags) {
+  const token = await resolveToken(cfg, { name: flags.name });
+  const sub = positional[1];
+  if (sub === "add") {
+    const slug = positional[2];
+    if (!slug || typeof flags.title !== "string" || typeof flags.statement !== "string") fail("usage: trellis assert add <slug> --title T --statement S [--metric 'key >= 95%']");
+    const body = { title: flags.title, statement: flags.statement };
+    if (typeof flags.metric === "string") body.metric = flags.metric;
+    const r = await api(cfg, "POST", `/projects/${cfg.project}/specs/${slug}/assertions`, body, token);
+    console.log(`added ${r.assertion.humanId}: ${r.assertion.title}`);
+  } else if (sub === "edit") {
+    const hid = positional[2];
+    if (!hid) fail("usage: trellis assert edit <humanId> [--title T] [--statement S] [--metric 'expr'|'']");
+    const body = {};
+    if (typeof flags.title === "string") body.title = flags.title;
+    if (typeof flags.statement === "string") body.statement = flags.statement;
+    if (flags.metric !== undefined) body.metric = flags.metric === true ? null : flags.metric; // --metric "" clears
+    if (Object.keys(body).length === 0) fail("nothing to edit — pass --title / --statement / --metric");
+    const r = await api(cfg, "PATCH", `/projects/${cfg.project}/assertions/${hid}`, body, token);
+    console.log(`edited ${r.assertion.humanId} (v${r.assertion.version})`);
+  } else fail("usage: trellis assert add <slug> ... | trellis assert edit <humanId> ...");
+}
+
+// A decision: agree or retire an assertion (rationale is the record).
+async function cmdDecide(cfg, verb, positional, flags) {
+  const hid = positional[1];
+  const why = flags.why ?? flags.rationale;
+  if (!hid || typeof why !== "string") fail(`usage: trellis ${verb} <humanId> --why "reason"`);
+  await api(cfg, "POST", `/projects/${cfg.project}/assertions/${hid}/${verb}`, { rationale: why }, await resolveToken(cfg, { name: flags.name }));
+  console.log(`${verb === "agree" ? "agreed" : "retired"} ${hid}`);
+}
+
+// List open drifts (the Decide bucket) with their ids for `trellis resolve`.
+async function cmdDrifts(cfg, flags) {
+  const token = await resolveToken(cfg, { allowJoin: true });
+  const { buckets } = await api(cfg, "GET", `/projects/${cfg.project}/worklist`, null, token);
+  const drifts = (buckets.decide || []).filter((i) => i.kind === "drift");
+  if (!drifts.length) { console.log("no open drifts"); return; }
+  for (const d of drifts) console.log(`  ${d.id}  ${d.ref}  ${d.title.slice(0, 70)}`);
+}
+
+// A decision: resolve a drift by fix (code wrong, files a task), amend (intent
+// wrong, retires the assertion), or accept (tolerate the divergence).
+async function cmdResolve(cfg, positional, flags) {
+  const did = positional[1];
+  const choice = flags.amend ? "amend" : flags.fix ? "fix" : flags.accept ? "accept" : null;
+  const why = flags.why ?? flags.rationale;
+  if (!did || !choice || typeof why !== "string") fail('usage: trellis resolve <driftId> --amend|--fix|--accept --why "reason"');
+  const r = await api(cfg, "POST", `/projects/${cfg.project}/drifts/${did}/resolve`, { choice, rationale: why }, await resolveToken(cfg, { name: flags.name }));
+  console.log(`resolved ${did.slice(0, 8)} as ${choice} → assertion ${r.assertionStatus}${r.taskId ? ` (task ${r.taskId.slice(0, 8)})` : ""}`);
+}
+
+// Read: an assertion's statement, status, facts, and open drifts.
+async function cmdShow(cfg, positional, flags) {
+  const hid = positional[1];
+  if (!hid) fail("usage: trellis show <humanId>");
+  const token = await resolveToken(cfg, { allowJoin: true });
+  const d = await api(cfg, "GET", `/projects/${cfg.project}/assertions/${hid}`, null, token);
+  const a = d.assertion;
+  console.log(`${a.humanId}  [${a.status}]  ${a.title}\n\n${a.statement}\n`);
+  if (d.facts?.length) { console.log(`facts (${d.facts.length}):`); for (const f of d.facts) console.log(`  ${f.relation} — ${f.statement.slice(0, 80)}`); }
+  const open = (d.drifts || []).filter((x) => x.status !== "resolved");
+  if (open.length) { console.log(`open drifts:`); for (const dr of open) console.log(`  ${dr.id} — ${dr.summary}`); }
+}
+
 async function cmdStatus(cfg) {
   const token = await resolveToken(cfg, { allowJoin: true });
   const efforts = (await api(cfg, "GET", `/projects/${cfg.project}/efforts`, null, token)).efforts;
@@ -217,6 +301,15 @@ const HELP = `trellis — report reality to a Trellis project
   trellis worklist [--effort ID]       print the worklist
   trellis export [--dir specs]         write the git mirror (spec markdown)
   trellis ingest <slug> <file>         import a spec-format markdown file
+  trellis spec new <slug> --title T --code CODE    create a spec
+  trellis spec <slug>                  list a spec's assertions
+  trellis assert add <slug> --title T --statement S [--metric 'k >= 95%']
+  trellis assert edit <humanId> [--statement S] [--metric 'expr'|'']
+  trellis agree <humanId> --why R      proposed → agreed
+  trellis retire <humanId> --why R     retire an assertion
+  trellis drifts                       open drifts (the Decide bucket)
+  trellis resolve <driftId> --amend|--fix|--accept --why R
+  trellis show <humanId>               statement, status, facts, drifts
   trellis status                       efforts summary
 
 config: .trellis.json { url, project, joinCode, name?, checks? }
@@ -235,6 +328,13 @@ async function main() {
     case "worklist": return cmdWorklist(cfg, flags);
     case "export": return cmdExport(cfg, flags);
     case "ingest": return cmdIngest(cfg, positional, flags);
+    case "spec": return cmdSpec(cfg, positional, flags);
+    case "assert": return cmdAssert(cfg, positional, flags);
+    case "agree": return cmdDecide(cfg, "agree", positional, flags);
+    case "retire": return cmdDecide(cfg, "retire", positional, flags);
+    case "drifts": return cmdDrifts(cfg, flags);
+    case "resolve": return cmdResolve(cfg, positional, flags);
+    case "show": return cmdShow(cfg, positional, flags);
     case "status": return cmdStatus(cfg);
     default: fail(`unknown command "${cmd}" — try \`trellis help\``);
   }
