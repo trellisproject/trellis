@@ -29,7 +29,13 @@ export const metricLabel = (a: Assertion) => a.metricKey ? `${a.metricKey} ${COM
 export type Spec = { id: string; slug: string; title: string; version: number };
 export type Drift = { id: string; kind: "reality" | "contradiction"; assertionId: string; assertionBId: string | null; status: string; summary: string };
 export type Challenge = { id: string; onDecisionId: string; rationale: string; status: string };
-export type EffortAssertion = { humanId: string; title: string; status: AssertionStatus };
+export type EffortAssertion = {
+  humanId: string; title: string; status: AssertionStatus;
+  metricKey: string | null; metricComparator: "gte" | "gt" | "lte" | "lt" | "eq" | null; metricTarget: number | null; metricUnit: string | null;
+  latestValue: number | null;
+};
+const COMPARATOR_SYM: Record<string, string> = { gte: "≥", gt: ">", lte: "≤", lt: "<", eq: "=" };
+export const targetLabel = (a: EffortAssertion) => a.metricKey ? `${COMPARATOR_SYM[a.metricComparator ?? "gte"]} ${a.metricTarget}${a.metricUnit ?? ""}` : null;
 export type Effort = {
   id: string; title: string;
   status: "active" | "next" | "someday" | "done";

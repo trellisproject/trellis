@@ -117,7 +117,8 @@ async function main() {
 
   // Roadmap — the focus stack: an active checklist effort + a metric effort behind it.
   await api("POST", `/projects/${pid}/efforts`, { token: tok, body: { title: "Payments v1 hardening", status: "active", goal_type: "checklist", assertions: ["PAY-API-001", "PAY-API-002", "PAY-API-003", "PAY-API-004", "PAY-API-005", "PAY-API-006"] } });
-  await api("POST", `/projects/${pid}/efforts`, { token: tok, body: { title: "Dispute-handling accuracy", status: "next", goal_type: "metric", goal_target: ">= 99% dispute-event capture within 60s" } });
+  const metricEffort = await api("POST", `/projects/${pid}/efforts`, { token: tok, body: { title: "Fraud-model accuracy", status: "active", goal_type: "metric", goal_target: "precision >= 92%" } });
+  await api("PATCH", `/projects/${pid}/efforts/${metricEffort.effort.id}`, { token: tok, body: { add_assertions: ["PAY-API-009"], rationale: "track fraud precision as the accuracy goal" } });
 
   // Requests: one accepted + linked to shipped intent, one still new.
   const reqA = await api("POST", `/projects/${pid}/requests`, { token: tok, body: { title: "Idempotent charges so retries don't double-bill", requester: "customer: Northwind", source: "email" } });

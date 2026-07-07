@@ -38,17 +38,40 @@ export async function progressFor(projectId: string): Promise<Map<string, Progre
   return new Map(rows.map((r) => [r.effort_id, { verified: Number(r.verified), total: Number(r.total) }]));
 }
 
-export async function assertionsByEffort(projectId: string): Promise<Map<string, { humanId: string; title: string; status: string }[]>> {
-  const rows = await db
-    .select({ effortId: effortAssertions.effortId, humanId: assertions.humanId, title: assertions.title, status: assertions.status })
-    .from(effortAssertions)
-    .innerJoin(efforts, eq(efforts.id, effortAssertions.effortId))
-    .innerJoin(assertions, eq(assertions.id, effortAssertions.assertionId))
-    .where(eq(efforts.projectId, projectId));
-  const map = new Map<string, { humanId: string; title: string; status: string }[]>();
+export type EffortAssertion = {
+  humanId: string; title: string; status: string;
+  metricKey: string | null; metricComparator: string | null; metricTarget: number | null; metricUnit: string | null;
+  latestValue: number | null; // live measurement for metric assertions (TRL-CORE-038)
+};
+
+// Latest measured value per metric key in the project.
+async function latestMeasurements(projectId: string): Promise<Map<string, number>> {
+  const rows = (await db.execute(sql`
+    SELECT DISTINCT ON (metric_key) metric_key, measured_value
+    FROM facts
+    WHERE project_id = ${projectId} AND metric_key IS NOT NULL AND measured_value IS NOT NULL
+    ORDER BY metric_key, observed_at DESC
+  `)) as unknown as { metric_key: string; measured_value: number }[];
+  return new Map(rows.map((r) => [r.metric_key, Number(r.measured_value)]));
+}
+
+export async function assertionsByEffort(projectId: string): Promise<Map<string, EffortAssertion[]>> {
+  const [rows, latest] = await Promise.all([
+    db
+      .select({
+        effortId: effortAssertions.effortId, humanId: assertions.humanId, title: assertions.title, status: assertions.status,
+        metricKey: assertions.metricKey, metricComparator: assertions.metricComparator, metricTarget: assertions.metricTarget, metricUnit: assertions.metricUnit,
+      })
+      .from(effortAssertions)
+      .innerJoin(efforts, eq(efforts.id, effortAssertions.effortId))
+      .innerJoin(assertions, eq(assertions.id, effortAssertions.assertionId))
+      .where(eq(efforts.projectId, projectId)),
+    latestMeasurements(projectId),
+  ]);
+  const map = new Map<string, EffortAssertion[]>();
   for (const r of rows) {
     const list = map.get(r.effortId) ?? [];
-    list.push({ humanId: r.humanId, title: r.title, status: r.status });
+    list.push({ ...r, latestValue: r.metricKey ? latest.get(r.metricKey) ?? null : null });
     map.set(r.effortId, list);
   }
   for (const list of map.values()) list.sort((a, b) => a.humanId.localeCompare(b.humanId));

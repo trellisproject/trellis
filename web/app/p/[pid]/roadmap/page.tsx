@@ -1,7 +1,7 @@
 "use client";
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
-import { api, type Effort } from "@/lib/api";
+import { api, targetLabel, type Effort, type EffortAssertion } from "@/lib/api";
 import { Badge } from "@/components/Badge";
 import { AssertionPickerModal } from "@/components/AssertionPickerModal";
 
@@ -77,14 +77,20 @@ function EffortCard({ pid, e, onStatus, onAdd }: { pid: string; e: Effort; onSta
         <div className="between" style={{ marginBottom: 10 }}>
           <div className="flex"><strong>{e.title}</strong><span className="pill" style={{ textTransform: "capitalize" }}>{e.goalType}</span></div>
           <div className="flex">
-            {e.goalType !== "metric" && <button className="btn ghost" onClick={onAdd}>+ Add assertions</button>}
+            <button className="btn ghost" onClick={onAdd}>+ Add assertions</button>
             <select className="mini-select" value={e.status} onChange={(ev) => onStatus(e, ev.target.value as Effort["status"])}>
               <option value="active">active</option><option value="next">next</option><option value="someday">someday</option><option value="done">done</option>
             </select>
           </div>
         </div>
         {e.goalType === "metric" ? (
-          <div className="mutedtext" style={{ fontSize: 13 }}>Goal: <span style={{ color: "var(--text)" }}>{e.goalTarget || "(set a target)"}</span><span style={{ marginLeft: 10, opacity: 0.7 }}>· metric tracking arrives with metric assertions</span></div>
+          e.assertions.length === 0 ? (
+            <div className="mutedtext" style={{ fontSize: 13 }}>Goal: <span style={{ color: "var(--text)" }}>{e.goalTarget || "(set a target)"}</span><span style={{ marginLeft: 10, opacity: 0.7 }}>· add a metric assertion to track it live</span></div>
+          ) : (
+            <div className="between">
+              <span className="mutedtext" style={{ fontSize: 13 }}>{e.progress.verified} of {e.progress.total} metrics on target</span>
+            </div>
+          )
         ) : e.goalType === "open" ? (
           <div className="mutedtext" style={{ fontSize: 13 }}>Open-ended · {e.assertions.length} assertion{e.assertions.length === 1 ? "" : "s"} · ship increments as they come</div>
         ) : (
@@ -99,8 +105,17 @@ function EffortCard({ pid, e, onStatus, onAdd }: { pid: string; e: Effort; onSta
       </div>
       {e.assertions.map((a) => (
         <Link key={a.humanId} href={`/p/${pid}/a/${a.humanId}`} className="row between" style={{ display: "flex" }}>
-          <div className="flex"><span className="aid">{a.humanId}</span><span>{a.title}</span></div>
-          <div className="flex"><Badge status={a.status} /><span className="mutedtext">→</span></div>
+          <div className="flex" style={{ minWidth: 0 }}><span className="aid">{a.humanId}</span><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.title}</span></div>
+          <div className="flex">
+            {a.metricKey && (
+              <span className="mono" style={{ fontSize: 12.5 }}>
+                <span style={{ color: a.status === "verified" ? "var(--green)" : a.status === "drifted" ? "var(--red)" : "var(--muted)", fontWeight: 600 }}>{a.latestValue != null ? `${a.latestValue}${a.metricUnit ?? ""}` : "—"}</span>
+                <span className="mutedtext"> / {targetLabel(a)}</span>
+              </span>
+            )}
+            <Badge status={a.status} />
+            <span className="mutedtext">→</span>
+          </div>
         </Link>
       ))}
     </div>
