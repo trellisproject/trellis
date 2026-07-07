@@ -14,6 +14,7 @@ const NAV = [
   { seg: "facts", label: "Facts" },
   { seg: "history", label: "History" },
   { seg: "tasks", label: "Tasks" },
+  { seg: "settings", label: "Settings" },
 ];
 
 export default function ProjectLayout({ children, params }: { children: ReactNode; params: Promise<{ pid: string }> }) {

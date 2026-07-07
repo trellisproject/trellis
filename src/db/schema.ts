@@ -32,6 +32,10 @@ export const projects = pgTable("projects", {
   id: id(),
   name: text("name").notNull(),
   repos: jsonb("repos").$type<string[]>().default([]).notNull(),
+  // TRL-CORE-034: rotatable code that self-provisions member access. Lives in
+  // the repo's .trellis.json, so plaintext here is by design (repo access is
+  // the boundary).
+  joinCode: text("join_code"),
   webhookSecretHash: text("webhook_secret_hash"), // deprecated, unused
   // TRL-API-011: HMAC verification needs the shared secret itself (plaintext in
   // V1; envelope-encrypt in production).

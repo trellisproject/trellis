@@ -3,7 +3,7 @@ import { z } from "zod";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { projects, memberships, principals, agentTokens } from "../db/schema.js";
-import { generateToken, hashToken } from "../lib/tokens.js";
+import { generateJoinCode, generateToken, hashToken } from "../lib/tokens.js";
 import { requireMember, requireOperator } from "../middleware/auth.js";
 import type { AppEnv } from "../types.js";
 
@@ -25,9 +25,10 @@ projectRoutes.post("/projects", async (c) => {
   }
   const { name, repos, operator } = parsed.data;
   const raw = generateToken();
+  const joinCode = generateJoinCode();
 
   const result = await db.transaction(async (tx) => {
-    const project = (await tx.insert(projects).values({ name, repos: repos ?? [] }).returning())[0]!;
+    const project = (await tx.insert(projects).values({ name, repos: repos ?? [], joinCode }).returning())[0]!;
     const principal = (
       await tx
         .insert(principals)
@@ -43,7 +44,38 @@ projectRoutes.post("/projects", async (c) => {
     return { project, operator: principal };
   });
 
-  return c.json({ ...result, token: raw }, 201);
+  return c.json({ ...result, token: raw, joinCode }, 201);
+});
+
+// POST /projects/:pid/join — self-service member onboarding with the project's
+// join code (TRL-CORE-034/035). No prior auth: the code is the credential.
+// Grants MEMBER role only — never operator.
+const joinBody = z.object({ code: z.string().min(1), displayName: z.string().min(1), kind: z.enum(["human", "agent"]).default("agent") });
+projectRoutes.post("/projects/:pid/join", async (c) => {
+  const pid = c.req.param("pid");
+  const parsed = joinBody.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: "Invalid body", code: "INVALID_INPUT" }, 422);
+  const project = (await db.select().from(projects).where(eq(projects.id, pid)))[0];
+  if (!project || !project.joinCode || project.joinCode !== parsed.data.code) {
+    return c.json({ error: "Invalid join code", code: "BAD_JOIN_CODE" }, 403);
+  }
+  const raw = generateToken();
+  const principal = await db.transaction(async (tx) => {
+    const p = (await tx.insert(principals).values({ kind: parsed.data.kind, displayName: parsed.data.displayName }).returning())[0]!;
+    await tx.insert(memberships).values({ projectId: pid, principalId: p.id, role: "member" });
+    await tx.insert(agentTokens).values({ projectId: pid, principalId: p.id, tokenHash: hashToken(raw) });
+    return p;
+  });
+  return c.json({ principal, token: raw, role: "member" }, 201);
+});
+
+// POST /projects/:pid/join-code/rotate — operator rotates the code, killing the old one.
+projectRoutes.post("/projects/:pid/join-code/rotate", async (c) => {
+  const op = await requireOperator(c);
+  if (op instanceof Response) return op;
+  const joinCode = generateJoinCode();
+  await db.update(projects).set({ joinCode }).where(eq(projects.id, c.req.param("pid")));
+  return c.json({ joinCode });
 });
 
 const mintToken = z.object({
@@ -93,6 +125,9 @@ projectRoutes.get("/projects/:pid", async (c) => {
   const pid = c.req.param("pid");
   const row = (await db.select().from(projects).where(eq(projects.id, pid)))[0];
   if (!row) return c.json({ error: "Project not found", code: "NOT_FOUND" }, 404);
+  // Only operators see the join code (TRL-CORE-035).
+  const { joinCode, webhookSecretHash, ...safe } = row;
+  const project = m.role === "operator" ? { ...safe, joinCode } : safe;
   const members = await db
     .select({
       principalId: memberships.principalId,
@@ -103,5 +138,5 @@ projectRoutes.get("/projects/:pid", async (c) => {
     .from(memberships)
     .innerJoin(principals, eq(principals.id, memberships.principalId))
     .where(eq(memberships.projectId, pid));
-  return c.json({ project: row, members });
+  return c.json({ project, members });
 });

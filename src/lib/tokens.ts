@@ -8,3 +8,8 @@ export function hashToken(raw: string): string {
 export function generateToken(): string {
   return `trk_${randomBytes(24).toString("base64url")}`;
 }
+
+// A shorter, repo-friendly code that provisions member access (TRL-CORE-034).
+export function generateJoinCode(): string {
+  return `join_${randomBytes(9).toString("base64url")}`;
+}
