@@ -100,6 +100,10 @@ export async function ingestSpec(
           statement: pa.statement,
           status: pa.status,
           orderInSpec: pa.order,
+          metricKey: pa.metric?.key ?? null,
+          metricComparator: pa.metric?.comparator ?? null,
+          metricTarget: pa.metric?.target ?? null,
+          metricUnit: pa.metric?.unit ?? null,
         });
         created.push(pa.humanId);
       } else {
@@ -107,13 +111,21 @@ export async function ingestSpec(
         // statement + title + order. Status is server-owned once it advances
         // past the file's authored value, so we do not downgrade it here.
         const statementChanged = prev.statement !== pa.statement;
-        if (statementChanged || prev.title !== pa.title || prev.orderInSpec !== pa.order) {
+        const metricChanged =
+          prev.metricKey !== (pa.metric?.key ?? null) ||
+          prev.metricComparator !== (pa.metric?.comparator ?? null) ||
+          prev.metricTarget !== (pa.metric?.target ?? null);
+        if (statementChanged || metricChanged || prev.title !== pa.title || prev.orderInSpec !== pa.order) {
           await tx
             .update(assertions)
             .set({
               statement: pa.statement,
               title: pa.title,
               orderInSpec: pa.order,
+              metricKey: pa.metric?.key ?? null,
+              metricComparator: pa.metric?.comparator ?? null,
+              metricTarget: pa.metric?.target ?? null,
+              metricUnit: pa.metric?.unit ?? null,
               version: prev.version + 1,
               updatedAt: new Date(),
             })

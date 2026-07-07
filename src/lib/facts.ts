@@ -30,7 +30,22 @@ export type WriteFactInput = {
   expiresAt?: Date | null;
   supersedesId?: string | null;
   links?: FactLinkInput[];
+  // A metric measurement (TRL-CORE-038): the server compares it against
+  // matching metric assertions and derives support/contradiction.
+  metricKey?: string | null;
+  measuredValue?: number | null;
 };
+
+function satisfiesThreshold(value: number, comparator: string, target: number): boolean {
+  switch (comparator) {
+    case "gte": return value >= target;
+    case "gt": return value > target;
+    case "lte": return value <= target;
+    case "lt": return value < target;
+    case "eq": return value === target;
+    default: return false;
+  }
+}
 
 export type WriteFactResult =
   | { ok: true; fact: typeof facts.$inferSelect; driftsCreated: string[]; verified: string[] }
@@ -60,19 +75,37 @@ export async function writeFact(
     return { ok: false, code: "NOT_MEMBER", error: "Observer is not a member of this project" };
   }
 
-  // Resolve linked assertions by human id within the project.
-  const links = input.links ?? [];
-  let linkedByHumanId = new Map<string, typeof assertions.$inferSelect>();
+  // Resolve explicit links by human id.
+  type ResolvedLink = { assertion: string; relation: "supports" | "contradicts"; metric: boolean };
+  const links: ResolvedLink[] = (input.links ?? []).map((l) => ({ ...l, metric: false }));
+  const linkedByHumanId = new Map<string, typeof assertions.$inferSelect>();
   if (links.length > 0) {
     const humanIds = [...new Set(links.map((l) => l.assertion))];
     const rows = await db
       .select()
       .from(assertions)
       .where(and(eq(assertions.projectId, projectId), inArray(assertions.humanId, humanIds)));
-    linkedByHumanId = new Map(rows.map((r) => [r.humanId, r]));
+    for (const r of rows) linkedByHumanId.set(r.humanId, r);
     const missing = humanIds.filter((h) => !linkedByHumanId.has(h));
     if (missing.length > 0) {
       return { ok: false, code: "UNKNOWN_ASSERTION", error: `Unknown assertion(s): ${missing.join(", ")}` };
+    }
+  }
+
+  // TRL-CORE-038: a metric measurement derives support/contradiction against
+  // every metric assertion with a matching key — the server evaluates the
+  // threshold, no agent declaration needed.
+  const hasMetric = input.metricKey != null && input.measuredValue != null;
+  if (hasMetric) {
+    const metricAssertions = await db
+      .select()
+      .from(assertions)
+      .where(and(eq(assertions.projectId, projectId), eq(assertions.metricKey, input.metricKey!)));
+    for (const a of metricAssertions) {
+      if (a.metricComparator == null || a.metricTarget == null) continue;
+      const satisfied = satisfiesThreshold(input.measuredValue!, a.metricComparator, a.metricTarget);
+      linkedByHumanId.set(a.humanId, a);
+      links.push({ assertion: a.humanId, relation: satisfied ? "supports" : "contradicts", metric: true });
     }
   }
 
@@ -90,6 +123,8 @@ export async function writeFact(
           observedAt: input.observedAt ?? new Date(),
           expiresAt: input.expiresAt ?? null,
           supersedesId: input.supersedesId ?? null,
+          metricKey: input.metricKey ?? null,
+          measuredValue: input.measuredValue ?? null,
         })
         .returning()
     )[0]!;
@@ -106,9 +141,34 @@ export async function writeFact(
       });
 
       if (link.relation === "supports") {
+        // TRL-CORE-038: a satisfying metric measurement auto-resolves an open
+        // metric drift (the number recovered) — the loop self-heals without a
+        // manual resolution each iteration. The resolution is objective, so
+        // it's recorded as a system decision attributed to the observer.
+        if (link.metric && assertion.status === "drifted") {
+          const openDrifts = await tx
+            .select()
+            .from(drifts)
+            .where(and(eq(drifts.assertionId, assertion.id), eq(drifts.kind, "reality"), inArray(drifts.status, OPEN_DRIFT)));
+          for (const d of openDrifts) {
+            const dec = (
+              await tx
+                .insert(decisions)
+                .values({ projectId, actorId: input.observerId, onType: "drift", onId: d.id, choice: "fix", rationale: `auto: metric recovered — ${input.measuredValue} meets target` })
+                .returning()
+            )[0]!;
+            await tx.update(drifts).set({ status: "resolved", resolutionDecisionId: dec.id, updatedAt: new Date() }).where(eq(drifts.id, d.id));
+          }
+          await tx
+            .update(assertions)
+            .set({ status: "verified", preDriftStatus: null, version: assertion.version + 1, updatedAt: new Date() })
+            .where(eq(assertions.id, assertion.id));
+          await tx.insert(assertionStatusHistory).values({ assertionId: assertion.id, status: "verified", byPrincipalId: input.observerId, note: "metric recovered" });
+          verified.push(assertion.humanId);
+          continue;
+        }
         // TRL-CORE-005: a supporting fact is the sanctioned path to verified.
-        // Only an agreed/implemented assertion advances; drifted must resolve
-        // first, proposed isn't intent yet.
+        // Only an agreed/implemented assertion advances; proposed isn't intent yet.
         if (assertion.status === "agreed" || assertion.status === "implemented") {
           await tx
             .update(assertions)

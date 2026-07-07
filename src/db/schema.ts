@@ -7,6 +7,7 @@ import {
   timestamp,
   jsonb,
   date,
+  doublePrecision,
   uniqueIndex,
   index,
 } from "drizzle-orm/pg-core";
@@ -162,6 +163,12 @@ export const assertions = pgTable(
     preDriftStatus: text("pre_drift_status").$type<AssertionStatus>(),
     orderInSpec: integer("order_in_spec").notNull().default(0),
     version: integer("version").notNull().default(1),
+    // Metric assertions (TRL-CORE-038): a threshold the server evaluates
+    // measurements against. Authored in the spec's `metric:` line.
+    metricKey: text("metric_key"),
+    metricComparator: text("metric_comparator").$type<"gte" | "gt" | "lte" | "lt" | "eq">(),
+    metricTarget: doublePrecision("metric_target"),
+    metricUnit: text("metric_unit"),
     supersedesId: text("supersedes_id"), // amend: retired assertion this replaces
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -201,6 +208,10 @@ export const facts = pgTable(
     evidence: jsonb("evidence").$type<EvidenceRef[]>().notNull(), // >=1 enforced in app
     observedAt: timestamp("observed_at", { withTimezone: true }).notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
+    // Metric measurement (TRL-CORE-038): a value the server compares against
+    // matching metric assertions to derive support/contradiction.
+    metricKey: text("metric_key"),
+    measuredValue: doublePrecision("measured_value"),
     supersedesId: text("supersedes_id"),
     createdAt: createdAt(),
   },

@@ -66,6 +66,12 @@ Chargeback and dispute events are ingested and surfaced within one minute.
 status: agreed
 
 Daily settlement totals match the internal ledger to the cent.
+
+### PAY-API-009: Fraud-model precision holds above target
+status: agreed
+metric: fraud.model.precision >= 92 %
+
+Fraud-model precision on the labeled corpus stays at or above 92%.
 `;
 
 function pr(secret: string, title: string, trailer: string, sha: string, n: number) {
@@ -103,6 +109,11 @@ async function main() {
 
   // Drift B on PAY-API-006 (PCI) -> LEAVE OPEN (shows on triage).
   await api("POST", `/projects/${pid}/facts`, { token: checker.token, body: { key: "obs.006", value: false, statement: "Full card numbers appear in the charge-service debug logs", evidence: [{ type: "file", ref: "services/charge/logger.ts:88" }, { type: "commit", ref: "sha-pci" }], links: [{ assertion: "PAY-API-006", relation: "contradicts" }] } });
+
+  // Metric loop: a checker posts benchmark facts; below-target drifts, recovery self-heals.
+  for (const v of [93.5, 91.2, 90.8]) { // last one is below target -> drift
+    await api("POST", `/projects/${pid}/facts`, { token: checker.token, body: { key: "bench", value: v, statement: `fraud precision benchmark: ${v}%`, evidence: [{ type: "test", ref: `bench-${v}` }, { type: "commit", ref: "sha-b" }], metric_key: "fraud.model.precision", measured_value: v } });
+  }
 
   // Roadmap — the focus stack: an active checklist effort + a metric effort behind it.
   await api("POST", `/projects/${pid}/efforts`, { token: tok, body: { title: "Payments v1 hardening", status: "active", goal_type: "checklist", assertions: ["PAY-API-001", "PAY-API-002", "PAY-API-003", "PAY-API-004", "PAY-API-005", "PAY-API-006"] } });

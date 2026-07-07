@@ -54,6 +54,18 @@ export async function getAssertionDetail(projectId: string, humanId: string) {
     .where(eq(assertionStatusHistory.assertionId, a.id))
     .orderBy(asc(assertionStatusHistory.at));
 
+  // For a metric assertion, the recent measurement series (the loop's history).
+  let measurements: { value: number; at: Date }[] = [];
+  if (a.metricKey) {
+    const rows = await db
+      .select({ value: facts.measuredValue, at: facts.observedAt })
+      .from(facts)
+      .where(and(eq(facts.projectId, projectId), eq(facts.metricKey, a.metricKey)))
+      .orderBy(desc(facts.observedAt))
+      .limit(10);
+    measurements = rows.filter((r): r is { value: number; at: Date } => r.value != null);
+  }
+
   // Decisions made on this assertion directly, or on any of its drifts.
   const driftIds = relatedDrifts.map((d) => d.id);
   const decisionRows = await db
@@ -70,5 +82,5 @@ export async function getAssertionDetail(projectId: string, humanId: string) {
     )
     .orderBy(desc(decisions.at));
 
-  return { assertion: a, facts: linkedFacts, drifts: relatedDrifts, tasks: relatedTasks, statusHistory, decisions: decisionRows };
+  return { assertion: a, facts: linkedFacts, drifts: relatedDrifts, tasks: relatedTasks, statusHistory, decisions: decisionRows, measurements };
 }

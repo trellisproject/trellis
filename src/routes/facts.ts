@@ -27,6 +27,8 @@ const factBody = z.object({
   links: z
     .array(z.object({ assertion: z.string().min(1), relation: z.enum(["supports", "contradicts"]) }))
     .optional(),
+  metric_key: z.string().min(1).nullable().optional(),
+  measured_value: z.number().nullable().optional(),
 });
 
 const ERR_STATUS: Record<string, number> = {
@@ -55,11 +57,13 @@ factRoutes.post("/projects/:pid/facts", async (c) => {
     expiresAt: b.expires_at ? new Date(b.expires_at) : b.expires_at === null ? null : undefined,
     supersedesId: b.supersedes ?? null,
     links: b.links,
+    metricKey: b.metric_key ?? null,
+    measuredValue: b.measured_value ?? null,
   });
   if (!result.ok) {
     return c.json({ error: result.error, code: result.code }, (ERR_STATUS[result.code] ?? 400) as 400);
   }
-  return c.json({ fact: result.fact, driftsCreated: result.driftsCreated }, 201);
+  return c.json({ fact: result.fact, driftsCreated: result.driftsCreated, verified: result.verified }, 201);
 });
 
 // GET /projects/:pid/facts?key=&observer=

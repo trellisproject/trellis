@@ -43,6 +43,13 @@
       "when": 1783391966725,
       "tag": "0005_efforts",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1783392874947,
+      "tag": "0006_metrics",
+      "breakpoints": true
     }
   ]
 }

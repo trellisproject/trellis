@@ -23,7 +23,9 @@ export const api = {
 
 // ---- shared response types (mirror the server's JSON shapes) ----
 export type AssertionStatus = "proposed" | "agreed" | "implemented" | "verified" | "drifted" | "retired";
-export type Assertion = { id: string; humanId: string; title: string; statement: string; status: AssertionStatus };
+export type Assertion = { id: string; humanId: string; title: string; statement: string; status: AssertionStatus; metricKey?: string | null; metricComparator?: "gte" | "gt" | "lte" | "lt" | "eq" | null; metricTarget?: number | null; metricUnit?: string | null };
+const COMPARATORS: Record<string, string> = { gte: "≥", gt: ">", lte: "≤", lt: "<", eq: "=" };
+export const metricLabel = (a: Assertion) => a.metricKey ? `${a.metricKey} ${COMPARATORS[a.metricComparator ?? "gte"]} ${a.metricTarget}${a.metricUnit ?? ""}` : null;
 export type Spec = { id: string; slug: string; title: string; version: number };
 export type Drift = { id: string; kind: "reality" | "contradiction"; assertionId: string; assertionBId: string | null; status: string; summary: string };
 export type Challenge = { id: string; onDecisionId: string; rationale: string; status: string };
@@ -46,6 +48,7 @@ export type AssertionDetail = {
   tasks: { id: string; title: string; status: string }[];
   statusHistory: StatusEvent[];
   decisions: Decision[];
+  measurements: { value: number; at: string }[];
 };
 export type TaskDetail = { task: Task; assertions: string[]; checkpoints: { id: string; note: string; at: string }[]; dependsOn: string[] };
 export type Priority = "now" | "normal" | "later";
