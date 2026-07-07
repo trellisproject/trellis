@@ -32,7 +32,13 @@ export const projects = pgTable("projects", {
   id: id(),
   name: text("name").notNull(),
   repos: jsonb("repos").$type<string[]>().default([]).notNull(),
-  webhookSecretHash: text("webhook_secret_hash"), // TRL-API-011
+  webhookSecretHash: text("webhook_secret_hash"), // deprecated, unused
+  // TRL-API-011: HMAC verification needs the shared secret itself (plaintext in
+  // V1; envelope-encrypt in production).
+  webhookSecret: text("webhook_secret"),
+  // Facts derived from PR trailers are attributed to this integration agent
+  // principal (TRL-CORE-016 requires a member observer).
+  githubPrincipalId: text("github_principal_id"),
   createdAt: createdAt(),
 });
 
