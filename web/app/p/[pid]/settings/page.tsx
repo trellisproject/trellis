@@ -32,7 +32,7 @@ export default function Settings({ params }: { params: Promise<{ pid: string }> 
   }
 
   const code = data?.project.joinCode;
-  const isOperator = code !== undefined;
+  const isOperator = data ? "joinCode" in data.project : false; // field present only for operators
   const trellisJson = JSON.stringify({ url: apiUrl, project: pid, joinCode: code ?? "…" }, null, 2);
 
   return (
@@ -59,9 +59,9 @@ export default function Settings({ params }: { params: Promise<{ pid: string }> 
                     Anyone with this code can join as a <strong>member</strong> (propose, observe, write facts, capture requests — not decide). Rotating it invalidates the old one.
                   </p>
                   <div className="flex">
-                    <code className="mono" style={{ background: "var(--bg)", border: "1px solid var(--border)", padding: "8px 12px", borderRadius: 8, flex: 1 }}>{code}</code>
-                    <button className="btn ghost" onClick={() => copy("code", code!)}>{copied === "code" ? "Copied" : "Copy"}</button>
-                    <button className="btn ghost danger" onClick={rotate} disabled={busy}>{busy ? "…" : "Rotate"}</button>
+                    <code className="mono" style={{ background: "var(--bg)", border: "1px solid var(--border)", padding: "9px 12px", borderRadius: 8, flex: 1, color: code ? "var(--text)" : "var(--muted)" }}>{code || "No join code set — Rotate to generate one"}</code>
+                    <button className="btn ghost" onClick={() => copy("code", code!)} disabled={!code}>{copied === "code" ? "Copied" : "Copy"}</button>
+                    <button className="btn ghost danger" onClick={rotate} disabled={busy}>{busy ? "…" : code ? "Rotate" : "Generate"}</button>
                   </div>
                 </div></div>
 
