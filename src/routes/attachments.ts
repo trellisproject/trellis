@@ -4,7 +4,7 @@
 // upload. Degrades cleanly if no Blob store is connected yet.
 import { Hono } from "hono";
 import { and, desc, eq } from "drizzle-orm";
-import { del, put } from "@vercel/blob";
+import { del, get, put } from "@vercel/blob";
 import { db } from "../db/index.js";
 import { attachments } from "../db/schema.js";
 import { requireMember } from "../middleware/auth.js";
@@ -33,7 +33,7 @@ attachmentRoutes.post("/projects/:pid/attachments", async (c) => {
   // the store's OIDC token (Vercel injects it when a store is connected).
   let blob;
   try {
-    blob = await put(`${pid}/${filename}`, Buffer.from(buf), { access: "public", addRandomSuffix: true, contentType });
+    blob = await put(`${pid}/${filename}`, Buffer.from(buf), { access: "private", addRandomSuffix: true, contentType });
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : "Blob upload failed — is a store connected to this project?", code: "UPLOAD_FAILED" }, 502);
   }
@@ -56,6 +56,24 @@ attachmentRoutes.get("/projects/:pid/attachments", async (c) => {
   if (ti) conds.push(eq(attachments.targetId, ti));
   const rows = await db.select().from(attachments).where(and(...conds)).orderBy(desc(attachments.createdAt));
   return c.json({ attachments: rows });
+});
+
+// Authenticated proxy: stream the private blob's bytes after checking the
+// caller is a member. The web app fetches this WITH its bearer token and
+// renders via a local blob: URL — files never leave auth, no signed URLs.
+attachmentRoutes.get("/projects/:pid/attachments/:id/content", async (c) => {
+  const m = await requireMember(c);
+  if (m instanceof Response) return m;
+  const row = (await db.select().from(attachments).where(and(eq(attachments.id, c.req.param("id")), eq(attachments.projectId, c.req.param("pid")))))[0];
+  if (!row) return c.json({ error: "Not found", code: "NOT_FOUND" }, 404);
+  try {
+    const r = await get(row.url, { access: "private" });
+    if (!r) return c.json({ error: "Blob missing", code: "NOT_FOUND" }, 404);
+    const bytes = await new Response(r.stream).arrayBuffer();
+    return c.body(bytes, 200, { "content-type": row.contentType ?? "application/octet-stream", "cache-control": "private, max-age=60" });
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : "Fetch failed", code: "FETCH_FAILED" }, 502);
+  }
 });
 
 attachmentRoutes.delete("/projects/:pid/attachments/:id", async (c) => {

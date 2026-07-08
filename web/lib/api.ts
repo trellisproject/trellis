@@ -30,6 +30,14 @@ export const api = {
     if (!res.ok) throw new Error(json.error || `${res.status}`);
     return json as T;
   },
+  // Authenticated binary fetch → local object URL (for private attachments).
+  blob: async (path: string): Promise<string> => {
+    const s = getSession();
+    if (!s) throw new Error("Not connected");
+    const res = await fetch(`${s.apiUrl}${path}`, { headers: { Authorization: `Bearer ${s.token}` } });
+    if (!res.ok) throw new Error(`${res.status}`);
+    return URL.createObjectURL(await res.blob());
+  },
 };
 export type Attachment = { id: string; filename: string; url: string; contentType: string | null; size: number | null; createdAt: string };
 
