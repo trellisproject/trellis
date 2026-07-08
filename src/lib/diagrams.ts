@@ -43,11 +43,13 @@ async function computeStatuses(projectId: string): Promise<Map<string, NodeStatu
     db.select().from(diagramNodes).where(eq(diagramNodes.projectId, projectId)),
     db.select({ id: diagrams.id, parentNodeId: diagrams.parentNodeId }).from(diagrams).where(eq(diagrams.projectId, projectId)),
     db.select({ effortId: effortAssertions.effortId, status: assertions.status }).from(effortAssertions).innerJoin(assertions, eq(assertions.id, effortAssertions.assertionId)).where(eq(assertions.projectId, projectId)),
-    db.select({ id: assertions.id, status: assertions.status }).from(assertions).where(eq(assertions.projectId, projectId)),
+    db.select({ id: assertions.id, status: assertions.status, specId: assertions.specId }).from(assertions).where(eq(assertions.projectId, projectId)),
   ]);
   const assertStatus = new Map(asserts.map((a) => [a.id, a.status]));
   const effortStatuses = new Map<string, NodeStatus[]>();
   for (const r of ea) { const arr = effortStatuses.get(r.effortId) ?? []; arr.push(mapAssertion(r.status)); effortStatuses.set(r.effortId, arr); }
+  const specStatuses = new Map<string, NodeStatus[]>();
+  for (const a of asserts) if (a.specId) { const arr = specStatuses.get(a.specId) ?? []; arr.push(mapAssertion(a.status)); specStatuses.set(a.specId, arr); }
   const nodesByDiagram = new Map<string, typeof allNodes>();
   for (const n of allNodes) { const arr = nodesByDiagram.get(n.diagramId) ?? []; arr.push(n); nodesByDiagram.set(n.diagramId, arr); }
   const childDiagramOfNode = new Map<string, string>();
@@ -66,6 +68,7 @@ async function computeStatuses(projectId: string): Promise<Map<string, NodeStatu
     const parts: NodeStatus[] = [];
     if (n?.assertionId) parts.push(mapAssertion(assertStatus.get(n.assertionId)));
     else if (n?.effortId) parts.push(deriveEffort(effortStatuses.get(n.effortId) ?? []));
+    else if (n?.specId) parts.push(deriveEffort(specStatuses.get(n.specId) ?? []));
     if (childDiagramOfNode.has(nodeId)) parts.push(aggregate((nodesByDiagram.get(childDiagramOfNode.get(nodeId)!) ?? []).map((c) => statusOf(c.id, seen))));
     const s = parts.length ? aggregate(parts) : "none";
     memo.set(nodeId, s);
@@ -90,6 +93,8 @@ export async function getDiagram(projectId: string, key: string) {
   const assIds = nodes.map((n) => n.assertionId).filter(Boolean) as string[];
   const effTitles = effIds.length ? new Map((await db.select({ id: efforts.id, title: efforts.title }).from(efforts).where(inArray(efforts.id, effIds))).map((e) => [e.id, e.title])) : new Map();
   const assHumans = assIds.length ? new Map((await db.select({ id: assertions.id, humanId: assertions.humanId, title: assertions.title }).from(assertions).where(inArray(assertions.id, assIds))).map((a) => [a.id, a])) : new Map();
+  const specIds = nodes.map((n) => n.specId).filter(Boolean) as string[];
+  const specInfo = specIds.length ? new Map((await db.select({ id: specs.id, slug: specs.slug, title: specs.title }).from(specs).where(inArray(specs.id, specIds))).map((s) => [s.id, s])) : new Map<string, { slug: string; title: string }>();
   const keyById = new Map(nodes.map((n) => [n.id, n.key]));
 
   // Breadcrumb: walk parentNodeId up to a root.
@@ -112,6 +117,7 @@ export async function getDiagram(projectId: string, key: string) {
       childDiagramKey: childByNode.get(n.id)?.key ?? null,
       effortId: n.effortId, effortTitle: n.effortId ? effTitles.get(n.effortId) ?? null : null,
       assertionId: n.assertionId, assertionHumanId: n.assertionId ? assHumans.get(n.assertionId)?.humanId ?? null : null,
+      specId: n.specId, specSlug: n.specId ? specInfo.get(n.specId)?.slug ?? null : null, specTitle: n.specId ? specInfo.get(n.specId)?.title ?? null : null,
     })),
     edges: edges.map((e) => ({ id: e.id, fromKey: keyById.get(e.fromNodeId) ?? "", toKey: keyById.get(e.toNodeId) ?? "", label: e.label })),
   };
@@ -161,17 +167,17 @@ export async function createDiagram(projectId: string, input: { title: string; d
   return { ok: true, value: row };
 }
 
-export async function updateDiagram(projectId: string, diagramId: string, input: Partial<{ title: string; description: string; direction: "TD" | "LR" }>) {
+export async function updateDiagram(projectId: string, diagramId: string, input: Partial<{ title: string; description: string; direction: "TD" | "LR"; parentNodeId: string | null }>) {
   const patch: Record<string, unknown> = {};
-  for (const k of ["title", "description", "direction"] as const) if (input[k] !== undefined) patch[k] = input[k];
+  for (const k of ["title", "description", "direction", "parentNodeId"] as const) if (input[k] !== undefined) patch[k] = input[k];
   if (Object.keys(patch).length) await db.update(diagrams).set(patch).where(and(eq(diagrams.id, diagramId), eq(diagrams.projectId, projectId)));
 }
 
-export async function createNode(projectId: string, diagramId: string, input: { label: string; key?: string; kind?: typeof diagramNodes.$inferSelect["kind"]; effortId?: string | null; assertionId?: string | null }): Promise<Result<typeof diagramNodes.$inferSelect>> {
+export async function createNode(projectId: string, diagramId: string, input: { label: string; key?: string; kind?: typeof diagramNodes.$inferSelect["kind"]; effortId?: string | null; assertionId?: string | null; specId?: string | null }): Promise<Result<typeof diagramNodes.$inferSelect>> {
   const existing = await db.select({ key: diagramNodes.key, order: diagramNodes.order }).from(diagramNodes).where(eq(diagramNodes.diagramId, diagramId));
   const key = keyify(input.key || input.label, new Set(existing.map((r) => r.key)));
   const order = existing.reduce((m, r) => Math.max(m, r.order), -1) + 1;
-  const row = (await db.insert(diagramNodes).values({ projectId, diagramId, key, label: input.label, kind: input.kind ?? "step", effortId: input.effortId ?? null, assertionId: input.assertionId ?? null, order }).returning())[0]!;
+  const row = (await db.insert(diagramNodes).values({ projectId, diagramId, key, label: input.label, kind: input.kind ?? "step", effortId: input.effortId ?? null, assertionId: input.assertionId ?? null, specId: input.specId ?? null, order }).returning())[0]!;
   return { ok: true, value: row };
 }
 
@@ -189,9 +195,9 @@ export async function createEdge(projectId: string, diagramId: string, input: { 
   return { ok: true, value: row };
 }
 
-export async function updateNode(projectId: string, nodeId: string, input: Partial<{ label: string; kind: typeof diagramNodes.$inferSelect["kind"]; effortId: string | null; assertionId: string | null; order: number }>) {
+export async function updateNode(projectId: string, nodeId: string, input: Partial<{ label: string; kind: typeof diagramNodes.$inferSelect["kind"]; effortId: string | null; assertionId: string | null; specId: string | null; order: number }>) {
   const patch: Record<string, unknown> = {};
-  for (const k of ["label", "kind", "effortId", "assertionId", "order"] as const) if (input[k] !== undefined) patch[k] = input[k];
+  for (const k of ["label", "kind", "effortId", "assertionId", "specId", "order"] as const) if (input[k] !== undefined) patch[k] = input[k];
   if (Object.keys(patch).length) await db.update(diagramNodes).set(patch).where(and(eq(diagramNodes.id, nodeId), eq(diagramNodes.projectId, projectId)));
 }
 

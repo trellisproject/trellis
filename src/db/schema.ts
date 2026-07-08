@@ -476,6 +476,7 @@ export const diagramNodes = pgTable(
     kind: text("kind").$type<"step" | "decision" | "trigger" | "terminal" | "subflow">().notNull().default("step"),
     effortId: text("effort_id").references(() => efforts.id),
     assertionId: text("assertion_id").references(() => assertions.id),
+    specId: text("spec_id").references(() => specs.id), // anchor a whole spec — status = its assertions aggregated
     order: integer("order").notNull().default(0),
     createdAt: createdAt(),
   },

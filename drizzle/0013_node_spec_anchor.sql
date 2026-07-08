@@ -1,0 +1,2 @@
+ALTER TABLE "diagram_nodes" ADD COLUMN "spec_id" text;--> statement-breakpoint
+ALTER TABLE "diagram_nodes" ADD CONSTRAINT "diagram_nodes_spec_id_specs_id_fk" FOREIGN KEY ("spec_id") REFERENCES "public"."specs"("id") ON DELETE no action ON UPDATE no action;

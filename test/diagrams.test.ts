@@ -1,7 +1,7 @@
 import { beforeEach, describe, it, expect } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "../src/db/index.js";
-import { assertions } from "../src/db/schema.js";
+import { assertions, specs } from "../src/db/schema.js";
 import { ingestSpec } from "../src/lib/ingest.js";
 import { createEffort } from "../src/lib/efforts.js";
 import { createDiagram, createEdge, createNode, getDiagram, listDiagrams } from "../src/lib/diagrams.js";
@@ -98,6 +98,19 @@ describe("diagrams — the drift-colored map", () => {
     if (!child.ok) throw new Error("child");
     expect((await getDiagram(projectId, child.value.key))!.breadcrumb.map((x) => x.title)).toEqual(["System", "Child"]);
     expect((await getDiagram(projectId, parent.value.key))!.edges[0]).toMatchObject({ fromKey: a.value.key, toKey: b.value.key, label: "go" });
+  });
+
+  it("colors a node anchored to a whole spec by its assertions aggregated", async () => {
+    await seed(["T-X-001", "T-X-002"]);
+    const spec = (await db.select({ id: specs.id }).from(specs).where(eq(specs.projectId, projectId)))[0]!;
+    const d = await createDiagram(projectId, { title: "System" });
+    if (!d.ok) throw new Error(d.error);
+    await createNode(projectId, d.value.id, { label: "Domain", specId: spec.id });
+    await setStatus("T-X-001", "verified");
+    await setStatus("T-X-002", "verified");
+    expect((await getDiagram(projectId, d.value.key))!.nodes[0]!.status).toBe("verified");
+    await setStatus("T-X-002", "drifted");
+    expect((await getDiagram(projectId, d.value.key))!.nodes[0]!.status).toBe("drifted");
   });
 
   it("lists diagrams with a root flag", async () => {

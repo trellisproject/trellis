@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { and, eq, or } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { assertions, diagrams } from "../db/schema.js";
+import { assertions, diagrams, specs } from "../db/schema.js";
 import { requireMember } from "../middleware/auth.js";
 import { createDiagram, createEdge, createNode, deleteDiagram, deleteEdge, deleteNode, getDiagram, listDiagrams, mapRefs, updateDiagram, updateNode } from "../lib/diagrams.js";
 import type { AppEnv } from "../types.js";
@@ -15,6 +15,11 @@ export const diagramRoutes = new Hono<AppEnv>();
 async function resolveAssertion(projectId: string, ref: string | null | undefined): Promise<string | null> {
   if (!ref) return null;
   const r = (await db.select({ id: assertions.id }).from(assertions).where(and(eq(assertions.projectId, projectId), or(eq(assertions.humanId, ref), eq(assertions.id, ref)))))[0];
+  return r?.id ?? null;
+}
+async function resolveSpec(projectId: string, ref: string | null | undefined): Promise<string | null> {
+  if (!ref) return null;
+  const r = (await db.select({ id: specs.id }).from(specs).where(and(eq(specs.projectId, projectId), or(eq(specs.slug, ref), eq(specs.id, ref)))))[0];
   return r?.id ?? null;
 }
 async function ownDiagram(projectId: string, diagramId: string) {
@@ -52,17 +57,17 @@ diagramRoutes.post("/projects/:pid/diagrams", async (c) => {
   return r.ok ? c.json({ diagram: r.value }, 201) : c.json({ error: r.error, code: r.code }, 400);
 });
 
-const patchDiagramBody = z.object({ title: z.string().min(1).optional(), description: z.string().optional(), direction: z.enum(["TD", "LR"]).optional() });
+const patchDiagramBody = z.object({ title: z.string().min(1).optional(), description: z.string().optional(), direction: z.enum(["TD", "LR"]).optional(), parent_node_id: z.string().nullish() });
 diagramRoutes.patch("/projects/:pid/diagrams/:id", async (c) => {
   const m = await requireMember(c);
   if (m instanceof Response) return m;
   const b = patchDiagramBody.safeParse(await c.req.json().catch(() => ({})));
   if (!b.success) return c.json({ error: "Invalid input", code: "INVALID_INPUT", detail: b.error.flatten() }, 422);
-  await updateDiagram(c.req.param("pid"), c.req.param("id"), { title: b.data.title, description: b.data.description, direction: b.data.direction });
+  await updateDiagram(c.req.param("pid"), c.req.param("id"), { title: b.data.title, description: b.data.description, direction: b.data.direction, parentNodeId: b.data.parent_node_id === undefined ? undefined : b.data.parent_node_id });
   return c.json({ ok: true });
 });
 
-const nodeBody = z.object({ label: z.string().min(1), key: z.string().optional(), kind: z.enum(["step", "decision", "trigger", "terminal", "subflow"]).optional(), effort_id: z.string().nullish(), assertion: z.string().nullish() });
+const nodeBody = z.object({ label: z.string().min(1), key: z.string().optional(), kind: z.enum(["step", "decision", "trigger", "terminal", "subflow"]).optional(), effort_id: z.string().nullish(), assertion: z.string().nullish(), spec: z.string().nullish() });
 diagramRoutes.post("/projects/:pid/diagrams/:id/nodes", async (c) => {
   const m = await requireMember(c);
   if (m instanceof Response) return m;
@@ -71,7 +76,8 @@ diagramRoutes.post("/projects/:pid/diagrams/:id/nodes", async (c) => {
   const b = nodeBody.safeParse(await c.req.json().catch(() => ({})));
   if (!b.success) return c.json({ error: "Invalid input", code: "INVALID_INPUT", detail: b.error.flatten() }, 422);
   const assertionId = await resolveAssertion(pid, b.data.assertion);
-  const r = await createNode(pid, c.req.param("id"), { label: b.data.label, key: b.data.key, kind: b.data.kind, effortId: b.data.effort_id ?? null, assertionId });
+  const specId = await resolveSpec(pid, b.data.spec);
+  const r = await createNode(pid, c.req.param("id"), { label: b.data.label, key: b.data.key, kind: b.data.kind, effortId: b.data.effort_id ?? null, assertionId, specId });
   return r.ok ? c.json({ node: r.value }, 201) : c.json({ error: r.error, code: r.code }, 400);
 });
 
@@ -87,7 +93,7 @@ diagramRoutes.post("/projects/:pid/diagrams/:id/edges", async (c) => {
   return r.ok ? c.json({ edge: r.value }, 201) : c.json({ error: r.error, code: r.code }, 400);
 });
 
-const patchNodeBody = z.object({ label: z.string().min(1).optional(), kind: z.enum(["step", "decision", "trigger", "terminal", "subflow"]).optional(), effort_id: z.string().nullish(), assertion: z.string().nullish(), order: z.number().optional() });
+const patchNodeBody = z.object({ label: z.string().min(1).optional(), kind: z.enum(["step", "decision", "trigger", "terminal", "subflow"]).optional(), effort_id: z.string().nullish(), assertion: z.string().nullish(), spec: z.string().nullish(), order: z.number().optional() });
 diagramRoutes.patch("/projects/:pid/nodes/:nid", async (c) => {
   const m = await requireMember(c);
   if (m instanceof Response) return m;
@@ -97,6 +103,7 @@ diagramRoutes.patch("/projects/:pid/nodes/:nid", async (c) => {
   const patch: Parameters<typeof updateNode>[2] = { label: b.data.label, kind: b.data.kind, order: b.data.order };
   if (b.data.effort_id !== undefined) patch.effortId = b.data.effort_id ?? null;
   if (b.data.assertion !== undefined) patch.assertionId = b.data.assertion ? await resolveAssertion(pid, b.data.assertion) : null;
+  if (b.data.spec !== undefined) patch.specId = b.data.spec ? await resolveSpec(pid, b.data.spec) : null;
   await updateNode(pid, c.req.param("nid"), patch);
   return c.json({ ok: true });
 });

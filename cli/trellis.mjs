@@ -428,7 +428,7 @@ async function cmdMap(cfg, positional, flags) {
     const d = await api(cfg, "GET", `/projects/${P}/diagrams/${key}`, null, token);
     console.log(`# ${d.diagram.title}  (key=${d.diagram.key}, id=${d.diagram.id}, ${d.diagram.direction})`);
     console.log("nodes:");
-    for (const n of d.nodes) console.log(`  ${n.key}  <${n.kind}>  [${n.status}]  ${n.label}${n.childDiagramKey ? `  ⤵${n.childDiagramKey}` : ""}${n.assertionHumanId ? `  ~${n.assertionHumanId}` : ""}${n.effortTitle ? `  ~effort:${n.effortTitle}` : ""}`);
+    for (const n of d.nodes) console.log(`  ${n.key}  <${n.kind}>  [${n.status}]  ${n.label}${n.childDiagramKey ? `  ⤵${n.childDiagramKey}` : ""}${n.assertionHumanId ? `  ~${n.assertionHumanId}` : ""}${n.effortTitle ? `  ~effort:${n.effortTitle}` : ""}${n.specTitle ? `  ~spec:${n.specTitle}` : ""}`);
     console.log("edges:");
     for (const e of d.edges) console.log(`  ${e.fromKey} -${e.label ? `[${e.label}]` : ""}-> ${e.toKey}`);
     return;
@@ -441,6 +441,7 @@ async function cmdMap(cfg, positional, flags) {
     if (flags.kind) body.kind = flags.kind;
     if (flags.effort) body.effort_id = flags.effort;
     if (flags.assert) body.assertion = flags.assert;
+    if (flags.spec) body.spec = flags.spec;
     if (flags.key) body.key = flags.key;
     const { node } = await api(cfg, "POST", `/projects/${P}/diagrams/${did}/nodes`, body, token);
     console.log(`node ${node.id}  key=${node.key}`);

@@ -2,7 +2,7 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { api, type DiagramDetail, type DiagramNode, type Effort, type NodeKind } from "@/lib/api";
+import { api, type DiagramDetail, type DiagramNode, type Effort, type NodeKind, type Spec } from "@/lib/api";
 import { Mermaid } from "@/components/Mermaid";
 import { toMermaid, STATUS_COLOR, STATUS_LABEL } from "@/lib/diagram";
 import { DescriptionEditor } from "@/components/Description";
@@ -16,6 +16,7 @@ export default function DiagramPage({ params }: { params: Promise<{ pid: string;
   const router = useRouter();
   const [d, setD] = useState<DiagramDetail | null>(null);
   const [efforts, setEfforts] = useState<Effort[]>([]);
+  const [specs, setSpecs] = useState<Spec[]>([]);
   const [mode, setMode] = useState<"view" | "edit">("view");
   const [selected, setSelected] = useState<string | null>(null);
   const [highlight, setHighlight] = useState<string | undefined>(undefined);
@@ -26,6 +27,7 @@ export default function DiagramPage({ params }: { params: Promise<{ pid: string;
   async function load() { const r = await api.get<DiagramDetail>(`/projects/${pid}/diagrams/${key}`).catch(() => null); setD(r); setLoading(false); }
   useEffect(() => { load(); setSelected(null); setHighlight(typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("node") ?? undefined : undefined); /* eslint-disable-next-line */ }, [pid, key]);
   useEffect(() => { api.get<{ efforts: Effort[] }>(`/projects/${pid}/efforts`).then((r) => setEfforts(r.efforts)).catch(() => {}); }, [pid]);
+  useEffect(() => { api.get<{ specs: Spec[] }>(`/projects/${pid}/specs`).then((r) => setSpecs(r.specs)).catch(() => {}); }, [pid]);
 
   function onNode(k: string) {
     const n = d?.nodes.find((x) => x.key === k); if (!n) return;
@@ -33,6 +35,7 @@ export default function DiagramPage({ params }: { params: Promise<{ pid: string;
     if (n.childDiagramKey) router.push(`/p/${pid}/map/${n.childDiagramKey}`);
     else if (n.assertionHumanId) router.push(`/p/${pid}/a/${n.assertionHumanId}`);
     else if (n.effortId) router.push(`/p/${pid}/e/${n.effortId}`);
+    else if (n.specSlug) router.push(`/p/${pid}/specs/${n.specSlug}`);
   }
   async function addNode() { if (!nl.trim() || !d) return; await api.post(`/projects/${pid}/diagrams/${d.diagram.id}/nodes`, { label: nl.trim(), kind: nk }); setNl(""); load(); }
   async function addEdge() { if (!ef || !et || !d) return; await api.post(`/projects/${pid}/diagrams/${d.diagram.id}/edges`, { from: ef, to: et, label: elabel || undefined }); setEf(""); setEt(""); setElabel(""); load(); }
@@ -88,9 +91,10 @@ export default function DiagramPage({ params }: { params: Promise<{ pid: string;
                     <select className="mini-select" value={sel.kind} onChange={(e) => patchNode(sel.id, { kind: e.target.value })}>{KINDS.map((k) => <option key={k} value={k}>{k}</option>)}</select>
                   </div>
                   <div className="flex" style={{ gap: 8, flexWrap: "wrap", fontSize: 13 }}>
-                    <span className="mutedtext">Anchor to spec:</span>
-                    <select className="mini-select" value={sel.effortId ?? ""} onChange={(e) => patchNode(sel.id, { effort_id: e.target.value || null, assertion: null })}><option value="">— effort —</option>{efforts.map((x) => <option key={x.id} value={x.id}>{x.title}</option>)}</select>
-                    <input className="input" style={{ maxWidth: 160 }} defaultValue={sel.assertionHumanId ?? ""} key={sel.id + "a"} placeholder="or assertion id" onBlur={(e) => { const v = e.target.value.trim(); if (v !== (sel.assertionHumanId ?? "")) patchNode(sel.id, { assertion: v || null, effort_id: null }); }} />
+                    <span className="mutedtext">Anchor:</span>
+                    <select className="mini-select" value={sel.specId ?? ""} onChange={(e) => patchNode(sel.id, { spec: e.target.value || null, effort_id: null, assertion: null })}><option value="">— spec —</option>{specs.map((x) => <option key={x.id} value={x.id}>{x.title}</option>)}</select>
+                    <select className="mini-select" value={sel.effortId ?? ""} onChange={(e) => patchNode(sel.id, { effort_id: e.target.value || null, spec: null, assertion: null })}><option value="">— effort —</option>{efforts.map((x) => <option key={x.id} value={x.id}>{x.title}</option>)}</select>
+                    <input className="input" style={{ maxWidth: 150 }} defaultValue={sel.assertionHumanId ?? ""} key={sel.id + "a"} placeholder="or assertion id" onBlur={(e) => { const v = e.target.value.trim(); if (v !== (sel.assertionHumanId ?? "")) patchNode(sel.id, { assertion: v || null, effort_id: null, spec: null }); }} />
                     {sel.status !== "none" && <span className="flex" style={{ gap: 5 }}><span className="statusdot" style={{ background: STATUS_COLOR[sel.status] }} />{STATUS_LABEL[sel.status]}</span>}
                   </div>
                   <div className="flex" style={{ gap: 8 }}>
