@@ -42,6 +42,7 @@ export type Effort = {
   goalType: "checklist" | "metric" | "open";
   goalTarget: string | null;
   targetDate: string | null;
+  order: number;
   ownerId: string | null;
   ownerName: string | null;
   commitment: boolean;

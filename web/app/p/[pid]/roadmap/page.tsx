@@ -27,6 +27,7 @@ export default function Roadmap({ params }: { params: Promise<{ pid: string }> }
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [dragId, setDragId] = useState<string | null>(null);
 
   async function load() {
     const d = await api.get<{ efforts: Effort[] }>(`/projects/${pid}/efforts`);
@@ -44,6 +45,20 @@ export default function Roadmap({ params }: { params: Promise<{ pid: string }> }
   }
   async function setOwner(e: Effort, ownerId: string) {
     await api.patch(`/projects/${pid}/efforts/${e.id}`, { owner_id: ownerId || null });
+    load();
+  }
+  // Reorder within a status group: drop `fromId` at `toId`'s slot, renumber the
+  // group's `order` (a fluid PATCH — no decision). Optimistic, then reload.
+  async function reorder(groupItems: Effort[], fromId: string, toId: string) {
+    if (fromId === toId) return;
+    const ids = groupItems.map((e) => e.id);
+    const from = ids.indexOf(fromId), to = ids.indexOf(toId);
+    if (from < 0 || to < 0) return;
+    const next = [...ids];
+    next.splice(to, 0, next.splice(from, 1)[0]!);
+    const byId = new Map(groupItems.map((e) => [e.id, e]));
+    setEfforts((prev) => [...prev.filter((e) => !byId.has(e.id)), ...next.map((id, i) => ({ ...byId.get(id)!, order: i }))]);
+    await Promise.all(next.map((id, i) => (byId.get(id)!.order !== i ? api.patch(`/projects/${pid}/efforts/${id}`, { order: i }) : null)).filter(Boolean));
     load();
   }
 
@@ -71,7 +86,14 @@ export default function Roadmap({ params }: { params: Promise<{ pid: string }> }
               return (
                 <div key={g.status}>
                   <div className="section-label">{g.label} · {items.length}</div>
-                  {items.map((e) => <EffortCard key={e.id} pid={pid} e={e} members={members} onStatus={setStatus} onOwner={setOwner} onAdd={() => setAddingTo(e)} />)}
+                  {items.map((e) => (
+                    <div key={e.id}
+                      onDragOver={(ev) => { if (dragId && dragId !== e.id) ev.preventDefault(); }}
+                      onDrop={() => { if (dragId) reorder(items, dragId, e.id); setDragId(null); }}
+                      style={{ opacity: dragId === e.id ? 0.4 : 1 }}>
+                      <EffortCard pid={pid} e={e} members={members} onStatus={setStatus} onOwner={setOwner} onAdd={() => setAddingTo(e)} drag={{ onStart: () => setDragId(e.id), onEnd: () => setDragId(null) }} />
+                    </div>
+                  ))}
                 </div>
               );
             })}
@@ -94,13 +116,15 @@ export default function Roadmap({ params }: { params: Promise<{ pid: string }> }
   );
 }
 
-function EffortCard({ pid, e, members, onStatus, onOwner, onAdd }: { pid: string; e: Effort; members: Member[]; onStatus: (e: Effort, s: Effort["status"]) => void; onOwner: (e: Effort, ownerId: string) => void; onAdd: () => void }) {
+function EffortCard({ pid, e, members, onStatus, onOwner, onAdd, drag }: { pid: string; e: Effort; members: Member[]; onStatus: (e: Effort, s: Effort["status"]) => void; onOwner: (e: Effort, ownerId: string) => void; onAdd: () => void; drag?: { onStart: () => void; onEnd: () => void } }) {
   const pct = e.progress.total === 0 ? 0 : Math.round((e.progress.verified / e.progress.total) * 100);
   return (
     <div className="card">
       <div className="row">
         <div className="between" style={{ marginBottom: 10 }}>
-          <div className="flex" style={{ minWidth: 0 }}><strong>{e.title}</strong><span className="pill" style={{ textTransform: "capitalize" }}>{e.goalType}</span><DueBadge e={e} /></div>
+          <div className="flex" style={{ minWidth: 0 }}>
+            {drag && <span draggable onDragStart={drag.onStart} onDragEnd={drag.onEnd} title="Drag to reorder" style={{ cursor: "grab", color: "var(--muted)", userSelect: "none", fontSize: 15, lineHeight: 1 }}>⠿</span>}
+            <strong>{e.title}</strong><span className="pill" style={{ textTransform: "capitalize" }}>{e.goalType}</span><DueBadge e={e} /></div>
           <div className="flex">
             <select className="mini-select" value={e.ownerId ?? ""} onChange={(ev) => onOwner(e, ev.target.value)} title="Owner">
               <option value="">unowned</option>
