@@ -30,6 +30,8 @@ export default function Roadmap({ params }: { params: Promise<{ pid: string }> }
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ id: string; before: boolean } | null>(null);
+  const [mode, setMode] = useState<"edit" | "reorder">("edit");
   const [datingEffort, setDatingEffort] = useState<Effort | null>(null);
   useScrollRestore(!loading);
 
@@ -51,57 +53,110 @@ export default function Roadmap({ params }: { params: Promise<{ pid: string }> }
     await api.patch(`/projects/${pid}/efforts/${e.id}`, { owner_id: ownerId || null });
     load();
   }
-  // Reorder within a status group: drop `fromId` at `toId`'s slot, renumber the
-  // group's `order` (a fluid PATCH — no decision). Optimistic, then reload.
-  async function reorder(groupItems: Effort[], fromId: string, toId: string) {
-    if (fromId === toId) return;
-    const ids = groupItems.map((e) => e.id);
-    const from = ids.indexOf(fromId), to = ids.indexOf(toId);
-    if (from < 0 || to < 0) return;
-    const next = [...ids];
-    next.splice(to, 0, next.splice(from, 1)[0]!);
-    const byId = new Map(groupItems.map((e) => [e.id, e]));
-    setEfforts((prev) => [...prev.filter((e) => !byId.has(e.id)), ...next.map((id, i) => ({ ...byId.get(id)!, order: i }))]);
-    await Promise.all(next.map((id, i) => (byId.get(id)!.order !== i ? api.patch(`/projects/${pid}/efforts/${id}`, { order: i }) : null)).filter(Boolean));
+  function clearDrag() { setDragId(null); setDropTarget(null); }
+  // Write a group's new order (and status, if the item moved groups). Only the
+  // target group is renumbered — source gaps don't matter, order is relative.
+  // Fluid PATCHes, optimistic, then reload.
+  async function dropInto(status: Effort["status"], orderedIds: string[], fromId: string) {
+    const from = efforts.find((e) => e.id === fromId);
+    if (!from) return;
+    const changingStatus = from.status !== status;
+    setEfforts((prev) => prev.map((e) => { const i = orderedIds.indexOf(e.id); return i >= 0 ? { ...e, status, order: i } : e; }));
+    await Promise.all(orderedIds.map((id, i) => {
+      const e = efforts.find((x) => x.id === id);
+      const body: Record<string, unknown> = {};
+      if (!e || e.order !== i) body.order = i;
+      if (id === fromId && changingStatus) body.status = status;
+      return Object.keys(body).length ? api.patch(`/projects/${pid}/efforts/${id}`, body) : null;
+    }).filter(Boolean));
     load();
+  }
+  function handleDrop() {
+    if (!dragId || !dropTarget) return clearDrag();
+    const target = efforts.find((e) => e.id === dropTarget.id);
+    if (!target || dragId === target.id) return clearDrag();
+    const ids = efforts.filter((x) => x.status === target.status).sort((a, b) => a.order - b.order).map((x) => x.id).filter((id) => id !== dragId);
+    let idx = ids.indexOf(target.id);
+    if (!dropTarget.before) idx += 1;
+    ids.splice(idx, 0, dragId);
+    dropInto(target.status, ids, dragId);
+    clearDrag();
+  }
+  function dropIntoGroup(status: Effort["status"]) {
+    if (!dragId) return clearDrag();
+    const ids = efforts.filter((x) => x.status === status).sort((a, b) => a.order - b.order).map((x) => x.id).filter((id) => id !== dragId);
+    ids.push(dragId);
+    dropInto(status, ids, dragId);
+    clearDrag();
   }
 
   return (
     <>
       <div className="topbar">
         <h1>Roadmap</h1>
-        <span className="sub">Major efforts, ordered by attention — not dated releases. Ship increments under the active effort.</span>
-        <button className="btn" style={{ marginLeft: "auto" }} onClick={() => setCreating(true)}>+ New effort</button>
+        <span className="sub">Major efforts, ordered by attention — not dated releases.</span>
+        <div className="flex" style={{ marginLeft: "auto", gap: 10 }}>
+          <div className="segmented">
+            <button className={mode === "edit" ? "active" : ""} onClick={() => { setMode("edit"); clearDrag(); }}>Edit</button>
+            <button className={mode === "reorder" ? "active" : ""} onClick={() => { setMode("reorder"); clearDrag(); }}>Reorder</button>
+          </div>
+          {mode === "edit" && <button className="btn" onClick={() => setCreating(true)}>+ New effort</button>}
+        </div>
       </div>
       <div className="content">
         {loading ? <div className="empty">Loading…</div> : efforts.length === 0 ? (
           <div className="card"><div className="empty">No efforts yet. Name a major effort to focus on.</div></div>
         ) : (
-          <>
-            {efforts.some((e) => e.dueSoon) && (
-              <div>
-                <div className="section-label" style={{ color: "var(--red)" }}>⏰ Due soon — commitments pulled into focus · {efforts.filter((e) => e.dueSoon).length}</div>
-                {efforts.filter((e) => e.dueSoon).map((e) => <EffortCard key={e.id} pid={pid} e={e} members={members} onStatus={setStatus} onOwner={setOwner} onAdd={() => setAddingTo(e)} onDeadline={() => setDatingEffort(e)} />)}
-              </div>
-            )}
-            {GROUPS.map((g) => {
-              const items = efforts.filter((e) => e.status === g.status && !e.dueSoon);
-              if (items.length === 0) return null;
-              return (
-                <div key={g.status}>
-                  <div className="section-label">{g.label} · {items.length}</div>
-                  {items.map((e) => (
-                    <div key={e.id}
-                      onDragOver={(ev) => { if (dragId && dragId !== e.id) ev.preventDefault(); }}
-                      onDrop={() => { if (dragId) reorder(items, dragId, e.id); setDragId(null); }}
-                      style={{ opacity: dragId === e.id ? 0.4 : 1 }}>
-                      <EffortCard pid={pid} e={e} members={members} onStatus={setStatus} onOwner={setOwner} onAdd={() => setAddingTo(e)} onDeadline={() => setDatingEffort(e)} drag={{ onStart: () => setDragId(e.id), onEnd: () => setDragId(null) }} />
-                    </div>
-                  ))}
+          mode === "reorder" ? (
+            <>
+              <p className="mutedtext" style={{ fontSize: 13, marginBottom: 14 }}>Drag rows to reorder. Drop between items to place; drag into another section to change its attention.</p>
+              {GROUPS.map((g) => {
+                const items = efforts.filter((e) => e.status === g.status).sort((a, b) => a.order - b.order);
+                return (
+                  <div key={g.status} onDragOver={(ev) => { if (dragId && items.length === 0) ev.preventDefault(); }} onDrop={() => { if (items.length === 0) dropIntoGroup(g.status); }}>
+                    <div className="section-label">{g.label} · {items.length}</div>
+                    {items.length === 0 ? (
+                      <div className="reorder-empty">Drop here → “{g.label.split(" —")[0]}”</div>
+                    ) : items.map((e) => (
+                      <div key={e.id} className="reorder-row" draggable
+                        onDragStart={() => setDragId(e.id)}
+                        onDragEnd={clearDrag}
+                        onDragOver={(ev) => { if (!dragId) return; ev.preventDefault(); const r = ev.currentTarget.getBoundingClientRect(); setDropTarget({ id: e.id, before: ev.clientY < r.top + r.height / 2 }); }}
+                        onDrop={(ev) => { ev.stopPropagation(); handleDrop(); }}
+                        style={{ opacity: dragId === e.id ? 0.35 : 1, boxShadow: dropTarget?.id === e.id ? (dropTarget.before ? "inset 0 3px 0 0 var(--accent)" : "inset 0 -3px 0 0 var(--accent)") : undefined }}>
+                        <span className="grip">⠿</span>
+                        <span className="reorder-title">{e.title}</span>
+                        <span className="pill" style={{ textTransform: "capitalize" }}>{e.goalType}</span>
+                        <DueBadge e={e} />
+                        <span className="reorder-owner">{e.ownerName ?? "unowned"}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </>
+          ) : (
+            <>
+              {efforts.some((e) => e.dueSoon) && (
+                <div>
+                  <div className="section-label" style={{ color: "var(--red)" }}>⏰ Due soon — commitments pulled into focus · {efforts.filter((e) => e.dueSoon).length}</div>
+                  {efforts.filter((e) => e.dueSoon).map((e) => <EffortCard key={e.id} pid={pid} e={e} members={members} onStatus={setStatus} onOwner={setOwner} onAdd={() => setAddingTo(e)} onDeadline={() => setDatingEffort(e)} />)}
                 </div>
-              );
-            })}
-          </>
+              )}
+              {GROUPS.map((g) => {
+                const items = efforts.filter((e) => e.status === g.status && !e.dueSoon);
+                if (items.length === 0) return null;
+                return (
+                  <div key={g.status}>
+                    <div className="section-label">{g.label} · {items.length}</div>
+                    {items.map((e) => (
+                      <EffortCard key={e.id} pid={pid} e={e} members={members} onStatus={setStatus} onOwner={setOwner} onAdd={() => setAddingTo(e)} onDeadline={() => setDatingEffort(e)} />
+                    ))}
+                  </div>
+                );
+              })}
+            </>
+          )
         )}
       </div>
       {creating && <CreateEffortModal pid={pid} members={members} onClose={() => setCreating(false)} onDone={() => { setCreating(false); setLoading(true); load(); }} />}
