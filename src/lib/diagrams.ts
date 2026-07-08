@@ -60,11 +60,14 @@ async function computeStatuses(projectId: string): Promise<Map<string, NodeStatu
     if (seen.has(nodeId)) return "none"; // cycle guard
     seen.add(nodeId);
     const n = byId.get(nodeId);
-    let s: NodeStatus = "none";
-    if (!n) s = "none";
-    else if (n.assertionId) s = mapAssertion(assertStatus.get(n.assertionId));
-    else if (n.effortId) s = deriveEffort(effortStatuses.get(n.effortId) ?? []);
-    else if (childDiagramOfNode.has(nodeId)) s = aggregate((nodesByDiagram.get(childDiagramOfNode.get(nodeId)!) ?? []).map((c) => statusOf(c.id, seen)));
+    // Worst-wins across the node's own anchor AND its child diagram, so a node
+    // that both anchors a spec and drills into a subsystem lights up when
+    // either has drifted.
+    const parts: NodeStatus[] = [];
+    if (n?.assertionId) parts.push(mapAssertion(assertStatus.get(n.assertionId)));
+    else if (n?.effortId) parts.push(deriveEffort(effortStatuses.get(n.effortId) ?? []));
+    if (childDiagramOfNode.has(nodeId)) parts.push(aggregate((nodesByDiagram.get(childDiagramOfNode.get(nodeId)!) ?? []).map((c) => statusOf(c.id, seen))));
+    const s = parts.length ? aggregate(parts) : "none";
     memo.set(nodeId, s);
     return s;
   }

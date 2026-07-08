@@ -66,6 +66,24 @@ describe("diagrams — the drift-colored map", () => {
     expect(got.nodes[0]!.status).toBe("drifted"); // up-propagation
   });
 
+  it("a node that both anchors a spec and drills into a child surfaces drift from either", async () => {
+    await seed(["T-X-001", "T-X-002"]);
+    const eff = await createEffort(projectId, { title: "Area", assertions: ["T-X-001"] });
+    if (!eff.ok) throw new Error(eff.code);
+    await setStatus("T-X-001", "verified"); // own anchor verified
+    const parent = await createDiagram(projectId, { title: "System" });
+    if (!parent.ok) throw new Error(parent.error);
+    const sub = await createNode(projectId, parent.value.id, { label: "Sub", effortId: eff.value.id });
+    if (!sub.ok) throw new Error(sub.error);
+    const child = await createDiagram(projectId, { title: "Child", parentNodeId: sub.value.id });
+    if (!child.ok) throw new Error(child.error);
+    await createNode(projectId, child.value.id, { label: "leaf", assertionId: await assertId("T-X-002") });
+    await setStatus("T-X-002", "verified");
+    expect((await getDiagram(projectId, parent.value.key))!.nodes[0]!.status).toBe("verified");
+    await setStatus("T-X-002", "drifted"); // child drifts even though own anchor is verified
+    expect((await getDiagram(projectId, parent.value.key))!.nodes[0]!.status).toBe("drifted");
+  });
+
   it("resolves edges by node key and builds a breadcrumb up the hierarchy", async () => {
     const parent = await createDiagram(projectId, { title: "System" });
     if (!parent.ok) throw new Error(parent.error);
