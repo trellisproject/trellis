@@ -4,7 +4,7 @@ import { db } from "../src/db/index.js";
 import { assertions, specs } from "../src/db/schema.js";
 import { ingestSpec } from "../src/lib/ingest.js";
 import { createEffort } from "../src/lib/efforts.js";
-import { createDiagram, createEdge, createNode, getDiagram, listDiagrams } from "../src/lib/diagrams.js";
+import { createDiagram, createEdge, createNode, deleteDiagram, getDiagram, listDiagrams } from "../src/lib/diagrams.js";
 import { resetDb, makeProject } from "./helpers/db.js";
 
 let projectId: string;
@@ -111,6 +111,18 @@ describe("diagrams — the drift-colored map", () => {
     expect((await getDiagram(projectId, d.value.key))!.nodes[0]!.status).toBe("verified");
     await setStatus("T-X-002", "drifted");
     expect((await getDiagram(projectId, d.value.key))!.nodes[0]!.status).toBe("drifted");
+  });
+
+  it("deleting a diagram detaches only its own children, not unrelated maps", async () => {
+    const a = await createDiagram(projectId, { title: "A" });
+    const b = await createDiagram(projectId, { title: "B" });
+    if (!a.ok || !b.ok) throw new Error("diagram");
+    const nb = await createNode(projectId, b.value.id, { label: "nb", kind: "subflow" });
+    if (!nb.ok) throw new Error("nb");
+    const childB = await createDiagram(projectId, { title: "childB", parentNodeId: nb.value.id });
+    if (!childB.ok) throw new Error("childB");
+    await deleteDiagram(projectId, a.value.id); // deleting an unrelated diagram
+    expect((await getDiagram(projectId, b.value.key))!.nodes.find((n) => n.key === nb.value.key)!.childDiagramKey).toBe(childB.value.key);
   });
 
   it("lists diagrams with a root flag", async () => {

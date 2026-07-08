@@ -212,7 +212,10 @@ export async function deleteEdge(projectId: string, edgeId: string) {
 }
 export async function deleteDiagram(projectId: string, diagramId: string) {
   await db.delete(diagramEdges).where(and(eq(diagramEdges.projectId, projectId), eq(diagramEdges.diagramId, diagramId)));
-  await db.update(diagrams).set({ parentNodeId: null }).where(eq(diagrams.projectId, projectId)); // detach any children pointing at removed nodes
+  // Detach ONLY children whose parent node lives in this diagram — not every
+  // diagram in the project.
+  const nodeIds = (await db.select({ id: diagramNodes.id }).from(diagramNodes).where(and(eq(diagramNodes.projectId, projectId), eq(diagramNodes.diagramId, diagramId)))).map((r) => r.id);
+  if (nodeIds.length) await db.update(diagrams).set({ parentNodeId: null }).where(and(eq(diagrams.projectId, projectId), inArray(diagrams.parentNodeId, nodeIds)));
   await db.delete(diagramNodes).where(and(eq(diagramNodes.projectId, projectId), eq(diagramNodes.diagramId, diagramId)));
   await db.delete(diagrams).where(and(eq(diagrams.id, diagramId), eq(diagrams.projectId, projectId)));
 }
