@@ -5,7 +5,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { assertions, diagramEdges, diagramNodes, diagrams, effortAssertions, efforts } from "../db/schema.js";
+import { assertions, diagramEdges, diagramNodes, diagrams, effortAssertions, efforts, specs } from "../db/schema.js";
 
 type Result<T> = { ok: true; value: T } | { ok: false; code: string; error: string };
 
@@ -131,6 +131,27 @@ export async function listDiagrams(projectId: string) {
       return { id: d.id, key: d.key, title: d.title, parentNodeId: d.parentNodeId, isRoot: !d.parentNodeId, nodeCount: ids.length, status: aggregate(ids.map((i) => statuses.get(i) ?? "none")) };
     }),
   };
+}
+
+// Reverse lookup: which map nodes anchor this assertion (or any assertion in
+// this spec)? Powers "on the map" links from spec/assertion detail pages.
+export async function mapRefs(projectId: string, opts: { assertionHumanId?: string; specSlug?: string }) {
+  let assertionIds: string[] = [];
+  if (opts.assertionHumanId) {
+    const a = (await db.select({ id: assertions.id }).from(assertions).where(and(eq(assertions.projectId, projectId), eq(assertions.humanId, opts.assertionHumanId))))[0];
+    if (a) assertionIds = [a.id];
+  } else if (opts.specSlug) {
+    const s = (await db.select({ id: specs.id }).from(specs).where(and(eq(specs.projectId, projectId), eq(specs.slug, opts.specSlug))))[0];
+    if (s) assertionIds = (await db.select({ id: assertions.id }).from(assertions).where(eq(assertions.specId, s.id))).map((r) => r.id);
+  }
+  if (!assertionIds.length) return { refs: [] as { assertionHumanId: string; nodeKey: string; nodeLabel: string; diagramKey: string; diagramTitle: string }[] };
+  const refs = await db
+    .select({ assertionHumanId: assertions.humanId, nodeKey: diagramNodes.key, nodeLabel: diagramNodes.label, diagramKey: diagrams.key, diagramTitle: diagrams.title })
+    .from(diagramNodes)
+    .innerJoin(diagrams, eq(diagrams.id, diagramNodes.diagramId))
+    .innerJoin(assertions, eq(assertions.id, diagramNodes.assertionId))
+    .where(and(eq(diagramNodes.projectId, projectId), inArray(diagramNodes.assertionId, assertionIds)));
+  return { refs };
 }
 
 export async function createDiagram(projectId: string, input: { title: string; description?: string; direction?: "TD" | "LR"; parentNodeId?: string | null }): Promise<Result<typeof diagrams.$inferSelect>> {

@@ -156,6 +156,7 @@ label { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 5px
 .subtabs a.active { color: var(--text); }
 .subtabs a:hover { color: var(--text); }
 .mermaid-host g.node:hover { filter: brightness(1.2); }
+.mermaid-host g.node.mmd-highlight > rect, .mermaid-host g.node.mmd-highlight > polygon, .mermaid-host g.node.mmd-highlight > circle, .mermaid-host g.node.mmd-highlight > path { stroke: var(--accent) !important; stroke-width: 3px !important; filter: drop-shadow(0 0 6px var(--accent)); }
 
 /* Attachments */
 .attach { width: 128px; display: flex; flex-direction: column; gap: 4px; }

@@ -18,12 +18,13 @@ export default function DiagramPage({ params }: { params: Promise<{ pid: string;
   const [efforts, setEfforts] = useState<Effort[]>([]);
   const [mode, setMode] = useState<"view" | "edit">("view");
   const [selected, setSelected] = useState<string | null>(null);
+  const [highlight, setHighlight] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [nl, setNl] = useState(""); const [nk, setNk] = useState<NodeKind>("step");
   const [ef, setEf] = useState(""); const [et, setEt] = useState(""); const [elabel, setElabel] = useState("");
 
   async function load() { const r = await api.get<DiagramDetail>(`/projects/${pid}/diagrams/${key}`).catch(() => null); setD(r); setLoading(false); }
-  useEffect(() => { load(); setSelected(null); /* eslint-disable-next-line */ }, [pid, key]);
+  useEffect(() => { load(); setSelected(null); setHighlight(typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("node") ?? undefined : undefined); /* eslint-disable-next-line */ }, [pid, key]);
   useEffect(() => { api.get<{ efforts: Effort[] }>(`/projects/${pid}/efforts`).then((r) => setEfforts(r.efforts)).catch(() => {}); }, [pid]);
 
   function onNode(k: string) {
@@ -65,7 +66,7 @@ export default function DiagramPage({ params }: { params: Promise<{ pid: string;
         </div>
       </div>
       <div className="content">
-        <div className="card"><div className="row"><Mermaid chart={toMermaid(d)} onNodeClick={onNode} /></div></div>
+        <div className="card"><div className="row"><Mermaid chart={toMermaid(d)} onNodeClick={onNode} highlight={highlight} /></div></div>
         <div className="flex" style={{ gap: 16, fontSize: 12, margin: "4px 2px 16px", flexWrap: "wrap" }}>
           {LEGEND.map((s) => <span key={s} className="flex" style={{ gap: 6 }}><span className="statusdot" style={{ background: STATUS_COLOR[s] }} />{STATUS_LABEL[s]}</span>)}
           <span className="mutedtext">· click a node to {mode === "edit" ? "select it" : "drill in / open its spec"} · a double-box drills down</span>

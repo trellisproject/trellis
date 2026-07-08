@@ -5,6 +5,7 @@ import { api, metricLabel, type AssertionDetail } from "@/lib/api";
 import { Badge } from "@/components/Badge";
 import { RationaleModal } from "@/components/RationaleModal";
 import { BackButton } from "@/components/BackButton";
+import { MapRefs } from "@/components/MapRefs";
 
 export default function AssertionHub({ params }: { params: Promise<{ pid: string; humanId: string }> }) {
   const { pid, humanId } = use(params);
@@ -47,6 +48,8 @@ export default function AssertionHub({ params }: { params: Promise<{ pid: string
           <div className="section-label" style={{ marginTop: 0 }}>Statement · authored in Trellis, mirrored to git · edit on the spec page</div>
           <div>{a.statement}</div>
         </div></div>
+
+        <MapRefs pid={pid} query={`assertion=${humanId}`} />
 
         {a.metricKey && (
           <>

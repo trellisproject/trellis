@@ -29,10 +29,12 @@ function getMermaid() {
 
 let idCounter = 0;
 
-export function Mermaid({ chart, onNodeClick }: { chart: string; onNodeClick?: (key: string) => void }) {
+export function Mermaid({ chart, onNodeClick, highlight }: { chart: string; onNodeClick?: (key: string) => void; highlight?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const cbRef = useRef(onNodeClick);
   cbRef.current = onNodeClick;
+  const hlRef = useRef(highlight);
+  hlRef.current = highlight;
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -44,15 +46,16 @@ export function Mermaid({ chart, onNodeClick }: { chart: string; onNodeClick?: (
         if (cancelled || !ref.current) return;
         ref.current.innerHTML = svg;
         setError("");
-        if (cbRef.current) {
-          ref.current.querySelectorAll<SVGGElement>("g.node").forEach((el) => {
-            // mermaid node ids look like `flowchart-<key>-<n>`; our keys are alnum.
-            const key = el.id.match(/-([A-Za-z0-9_]+)-\d+$/)?.[1];
-            if (!key) return;
-            el.style.cursor = "pointer";
-            el.addEventListener("click", () => cbRef.current?.(key));
-          });
-        }
+        ref.current.querySelectorAll<SVGGElement>("g.node").forEach((el) => {
+          // mermaid node ids look like `flowchart-<key>-<n>`; our keys are alnum.
+          const key = el.id.match(/-([A-Za-z0-9_]+)-\d+$/)?.[1];
+          if (!key) return;
+          if (cbRef.current) { el.style.cursor = "pointer"; el.addEventListener("click", () => cbRef.current?.(key)); }
+          if (hlRef.current && key === hlRef.current) {
+            el.classList.add("mmd-highlight");
+            requestAnimationFrame(() => el.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" }));
+          }
+        });
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "Diagram error");
       }

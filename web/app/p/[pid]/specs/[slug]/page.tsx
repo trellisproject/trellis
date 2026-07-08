@@ -4,6 +4,7 @@ import Link from "next/link";
 import { api, metricLabel, type Assertion, type Spec } from "@/lib/api";
 import { Badge } from "@/components/Badge";
 import { RationaleModal } from "@/components/RationaleModal";
+import { MapRefs } from "@/components/MapRefs";
 
 export default function SpecDetail({ params }: { params: Promise<{ pid: string; slug: string }> }) {
   const { pid, slug } = use(params);
@@ -72,6 +73,7 @@ export default function SpecDetail({ params }: { params: Promise<{ pid: string; 
             ))}
           </div>
         )}
+        {!loading && <MapRefs pid={pid} query={`spec=${slug}`} showAssertion />}
       </div>
       {editing && <AssertionEditor pid={pid} slug={slug} existing={editing === "new" ? null : editing} onClose={() => setEditing(null)} onDone={() => { setEditing(null); setLoading(true); load(); }} />}
     </>

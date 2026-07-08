@@ -6,7 +6,7 @@ import { and, eq, or } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { assertions, diagrams } from "../db/schema.js";
 import { requireMember } from "../middleware/auth.js";
-import { createDiagram, createEdge, createNode, deleteDiagram, deleteEdge, deleteNode, getDiagram, listDiagrams, updateDiagram, updateNode } from "../lib/diagrams.js";
+import { createDiagram, createEdge, createNode, deleteDiagram, deleteEdge, deleteNode, getDiagram, listDiagrams, mapRefs, updateDiagram, updateNode } from "../lib/diagrams.js";
 import type { AppEnv } from "../types.js";
 
 export const diagramRoutes = new Hono<AppEnv>();
@@ -25,6 +25,13 @@ diagramRoutes.get("/projects/:pid/diagrams", async (c) => {
   const m = await requireMember(c);
   if (m instanceof Response) return m;
   return c.json(await listDiagrams(c.req.param("pid")));
+});
+
+// "On the map" reverse lookup for a spec detail / assertion hub page.
+diagramRoutes.get("/projects/:pid/map-refs", async (c) => {
+  const m = await requireMember(c);
+  if (m instanceof Response) return m;
+  return c.json(await mapRefs(c.req.param("pid"), { assertionHumanId: c.req.query("assertion"), specSlug: c.req.query("spec") }));
 });
 
 diagramRoutes.get("/projects/:pid/diagrams/:key", async (c) => {
