@@ -129,3 +129,13 @@ label { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 5px
 .md blockquote { border-left: 3px solid var(--border); margin: 6px 0; padding-left: 12px; color: var(--muted); }
 .md table { border-collapse: collapse; margin: 6px 0; display: block; overflow-x: auto; }
 .md th, .md td { border: 1px solid var(--border); padding: 4px 8px; }
+
+/* Attachments */
+.attach { width: 128px; display: flex; flex-direction: column; gap: 4px; }
+.attach > a { display: block; height: 84px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--panel-2); }
+.attach img { width: 100%; height: 100%; object-fit: cover; }
+.attach-file { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: 0.04em; }
+.attach-add { width: 128px; height: 84px; border: 1px dashed var(--border); border-radius: 8px; background: none; color: var(--muted); cursor: pointer; font-size: 13px; }
+.attach-add:hover { border-color: var(--accent); color: var(--text); }
+.attach-x { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 15px; line-height: 1; padding: 0; flex-shrink: 0; }
+.attach-x:hover { color: var(--red); }

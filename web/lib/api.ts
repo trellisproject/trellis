@@ -19,7 +19,19 @@ export const api = {
   get: <T,>(p: string) => call<T>("GET", p),
   post: <T,>(p: string, b?: unknown) => call<T>("POST", p, b),
   patch: <T,>(p: string, b?: unknown) => call<T>("PATCH", p, b),
+  del: <T,>(p: string) => call<T>("DELETE", p),
+  // Raw-body upload (files) — bypasses the JSON content-type of `call`.
+  upload: async <T,>(path: string, file: File): Promise<T> => {
+    const s = getSession();
+    if (!s) throw new Error("Not connected");
+    const res = await fetch(`${s.apiUrl}${path}`, { method: "POST", headers: { "content-type": file.type || "application/octet-stream", Authorization: `Bearer ${s.token}` }, body: file });
+    const text = await res.text();
+    const json = text ? JSON.parse(text) : {};
+    if (!res.ok) throw new Error(json.error || `${res.status}`);
+    return json as T;
+  },
 };
+export type Attachment = { id: string; filename: string; url: string; contentType: string | null; size: number | null; createdAt: string };
 
 // ---- shared response types (mirror the server's JSON shapes) ----
 export type AssertionStatus = "proposed" | "agreed" | "implemented" | "verified" | "drifted" | "retired";

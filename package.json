@@ -22,6 +22,7 @@
   "license": "MIT",
   "dependencies": {
     "@hono/node-server": "^2.0.4",
+    "@vercel/blob": "^2.6.0",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.26",
     "postgres": "^3.4.9",

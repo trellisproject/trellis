@@ -442,3 +442,24 @@ export const requestAssertions = pgTable("request_assertions", {
     .references(() => assertions.id)
     .notNull(),
 });
+
+// Supporting assets (designs, mockups, docs) attached to any object — an effort,
+// assertion, or task — stored in Vercel Blob. targetId is that object's id.
+export const attachments = pgTable(
+  "attachments",
+  {
+    id: id(),
+    projectId: text("project_id")
+      .references(() => projects.id)
+      .notNull(),
+    targetType: text("target_type").$type<"effort" | "assertion" | "task">().notNull(),
+    targetId: text("target_id").notNull(),
+    filename: text("filename").notNull(),
+    url: text("url").notNull(),
+    contentType: text("content_type"),
+    size: integer("size"),
+    uploadedById: text("uploaded_by_id").references(() => principals.id),
+    createdAt: createdAt(),
+  },
+  (t) => [index("attachment_target").on(t.projectId, t.targetType, t.targetId)],
+);

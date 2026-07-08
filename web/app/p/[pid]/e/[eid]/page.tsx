@@ -7,6 +7,7 @@ import { BackButton } from "@/components/BackButton";
 import { DeadlineModal } from "@/components/DeadlineModal";
 import { AssertionPickerModal } from "@/components/AssertionPickerModal";
 import { DescriptionEditor } from "@/components/Description";
+import { Attachments } from "@/components/Attachments";
 
 const STATUSES = ["active", "next", "someday", "done"] as const;
 
@@ -83,6 +84,10 @@ export default function EffortDetailPage({ params }: { params: Promise<{ pid: st
         <div className="card"><div className="row">
           <DescriptionEditor value={e.description ?? ""} onSave={(v) => patch({ description: v })} placeholder="What this area is — its scope, goals, links, context…" />
         </div></div>
+
+        {/* Assets */}
+        <div className="section-label">Assets <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0, opacity: 0.7, marginLeft: 6 }}>designs, mockups, docs</span></div>
+        <div className="card"><Attachments pid={pid} targetType="effort" targetId={eid} /></div>
 
         {/* Assertions */}
         <div className="section-label">Assertions ({d.assertions.length}) <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0, opacity: 0.7, marginLeft: 6 }}>the invariants this area must hold</span>
