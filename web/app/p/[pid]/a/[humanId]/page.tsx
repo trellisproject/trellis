@@ -4,6 +4,7 @@ import Link from "next/link";
 import { api, metricLabel, type AssertionDetail } from "@/lib/api";
 import { Badge } from "@/components/Badge";
 import { RationaleModal } from "@/components/RationaleModal";
+import { BackButton } from "@/components/BackButton";
 
 export default function AssertionHub({ params }: { params: Promise<{ pid: string; humanId: string }> }) {
   const { pid, humanId } = use(params);
@@ -23,7 +24,7 @@ export default function AssertionHub({ params }: { params: Promise<{ pid: string
   return (
     <>
       <div className="topbar">
-        <Link href={`/p/${pid}/specs`} className="mutedtext" style={{ fontSize: 13 }}>← Specs</Link>
+        <BackButton fallback={`/p/${pid}/specs`} />
         <h1 style={{ marginLeft: 8 }}><span className="aid" style={{ marginRight: 10 }}>{a.humanId}</span>{a.title}</h1>
         <Badge status={a.status} />
         <div className="flex" style={{ marginLeft: "auto" }}>

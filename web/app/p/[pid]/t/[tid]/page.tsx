@@ -2,6 +2,7 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { api, type TaskDetail, type Effort, type Member } from "@/lib/api";
+import { BackButton } from "@/components/BackButton";
 
 const STATUSES = ["open", "in_progress", "done", "blocked"] as const;
 
@@ -35,7 +36,7 @@ export default function TaskPage({ params }: { params: Promise<{ pid: string; ti
   return (
     <>
       <div className="topbar">
-        <Link href={`/p/${pid}/tasks`} className="mutedtext" style={{ fontSize: 13 }}>← Tasks</Link>
+        <BackButton fallback={`/p/${pid}/tasks`} />
         <h1 style={{ marginLeft: 8 }}>{t.title}</h1>
         <span className="pill" style={{ textTransform: "capitalize" }}>{t.status.replace("_", " ")}</span>
       </div>
