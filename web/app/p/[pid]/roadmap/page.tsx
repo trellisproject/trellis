@@ -5,6 +5,7 @@ import { api, targetLabel, type Effort, type EffortAssertion, type Member } from
 import { Badge } from "@/components/Badge";
 import { AssertionPickerModal } from "@/components/AssertionPickerModal";
 import { useScrollRestore } from "@/lib/scroll";
+import { DeadlineModal } from "@/components/DeadlineModal";
 
 function DueBadge({ e }: { e: Effort }) {
   if (e.dueInDays == null || !e.dueSoon) return null;
@@ -130,7 +131,7 @@ function EffortCard({ pid, e, members, onStatus, onOwner, onAdd, onDeadline, dra
         {/* Title */}
         <div className="flex" style={{ minWidth: 0, marginBottom: 10 }}>
           {drag && <span draggable onDragStart={drag.onStart} onDragEnd={drag.onEnd} title="Drag to reorder" style={{ cursor: "grab", color: "var(--muted)", userSelect: "none", fontSize: 15, lineHeight: 1 }}>⠿</span>}
-          <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.title}</strong>
+          <Link href={`/p/${pid}/e/${e.id}`} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><strong>{e.title}</strong></Link>
           <span className="pill" style={{ textTransform: "capitalize" }}>{e.goalType}</span>
           <DueBadge e={e} />
         </div>
@@ -194,43 +195,6 @@ function EffortCard({ pid, e, members, onStatus, onOwner, onAdd, onDeadline, dra
 
       <div className="row"><button className="btn ghost" style={{ fontSize: 13 }} onClick={onAdd}>+ Add assertions</button></div>
     </div>
-  );
-}
-
-function DeadlineModal({ pid, e, onClose, onDone }: { pid: string; e: Effort; onClose: () => void; onDone: () => void }) {
-  const [date, setDate] = useState(e.targetDate ?? "");
-  const [commitment, setCommitment] = useState(e.commitment);
-  const [why, setWhy] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const dateChanged = (date || "") !== (e.targetDate ?? "");
-  async function save(clear: boolean) {
-    setBusy(true); setError("");
-    try {
-      const changesDate = clear ? !!e.targetDate : dateChanged;
-      await api.patch(`/projects/${pid}/efforts/${e.id}`, { target_date: clear ? null : (date || null), commitment: clear ? false : commitment, rationale: changesDate ? why : undefined });
-      onDone();
-    } catch (err) { setError(err instanceof Error ? err.message : "Failed"); setBusy(false); }
-  }
-  return (
-    <div className="modal-backdrop" onClick={onClose}><div className="modal" onClick={(ev) => ev.stopPropagation()}>
-      <h3>Deadline — {e.title}</h3>
-      <label>Date</label>
-      <input className="input" type="date" value={date} onChange={(ev) => setDate(ev.target.value)} autoFocus />
-      <label className="flex" style={{ fontSize: 13, cursor: "pointer", marginTop: 4 }}>
-        <input type="checkbox" checked={commitment} onChange={(ev) => setCommitment(ev.target.checked)} /> Client commitment — pull into focus ~a week ahead
-      </label>
-      <label>Rationale{dateChanged ? " (required — changing a date is a decision)" : " (optional)"}</label>
-      <textarea className="input" rows={2} value={why} onChange={(ev) => setWhy(ev.target.value)} placeholder="Why this date?" />
-      {error && <p style={{ color: "var(--red)", fontSize: 13 }}>{error}</p>}
-      <div className="between" style={{ marginTop: 16 }}>
-        {e.targetDate ? <button className="btn ghost" onClick={() => save(true)} disabled={busy || !why.trim()} style={{ color: "var(--red)" }}>Clear deadline</button> : <span />}
-        <div className="flex">
-          <button className="btn ghost" onClick={onClose}>Cancel</button>
-          <button className="btn primary" onClick={() => save(false)} disabled={busy || !date || (dateChanged && !why.trim())}>Save</button>
-        </div>
-      </div>
-    </div></div>
   );
 }
 

@@ -3,9 +3,9 @@
 // (checklist of assertions | metric threshold | open-ended). Progress is
 // computed from verified facts, never hand-set. Scope/date changes are decisions.
 
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { assertions, decisions, effortAssertions, efforts, principals } from "../db/schema.js";
+import { assertions, decisions, effortAssertions, efforts, principals, tasks } from "../db/schema.js";
 import { authorizeDecider } from "./decisions.js";
 
 type Result<T> = { ok: true; value: T } | { ok: false; code: string; error: string };
@@ -194,6 +194,31 @@ export async function ownerNames(ownerIds: (string | null)[]): Promise<Map<strin
   if (!ids.length) return new Map();
   const rows = await db.select({ id: principals.id, name: principals.displayName }).from(principals).where(inArray(principals.id, ids));
   return new Map(rows.map((r) => [r.id, r.name]));
+}
+
+// The area cockpit: an effort with its assertions, tasks, and the decisions
+// that shaped its scope/dates.
+export async function getEffortDetail(projectId: string, effortId: string) {
+  const e = (await db.select().from(efforts).where(and(eq(efforts.id, effortId), eq(efforts.projectId, projectId))))[0];
+  if (!e) return null;
+  const [progress, byEffort, owners] = await Promise.all([progressFor(projectId), assertionsByEffort(projectId), ownerNames([e.ownerId])]);
+  const effortTasks = await db
+    .select({ id: tasks.id, title: tasks.title, status: tasks.status, priority: tasks.priority, ownerName: principals.displayName })
+    .from(tasks)
+    .leftJoin(principals, eq(principals.id, tasks.ownerId))
+    .where(and(eq(tasks.projectId, projectId), eq(tasks.effortId, effortId)))
+    .orderBy(asc(tasks.status), desc(tasks.createdAt));
+  const effortDecisions = await db
+    .select({ id: decisions.id, choice: decisions.choice, rationale: decisions.rationale, at: decisions.at, actorId: decisions.actorId })
+    .from(decisions)
+    .where(and(eq(decisions.projectId, projectId), eq(decisions.onType, "effort"), eq(decisions.onId, effortId)))
+    .orderBy(desc(decisions.at));
+  return {
+    effort: { ...e, ownerName: e.ownerId ? owners.get(e.ownerId) ?? null : null, ...deadlineInfo(e.targetDate, e.status), progress: progress.get(e.id) ?? { verified: 0, total: 0 } },
+    assertions: byEffort.get(effortId) ?? [],
+    tasks: effortTasks,
+    decisions: effortDecisions,
+  };
 }
 
 export async function listEfforts(projectId: string) {

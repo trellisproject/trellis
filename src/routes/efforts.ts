@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { changeEffort, createEffort, listEfforts } from "../lib/efforts.js";
+import { changeEffort, createEffort, getEffortDetail, listEfforts } from "../lib/efforts.js";
 import { requireMember } from "../middleware/auth.js";
 import type { AppEnv } from "../types.js";
 
@@ -46,6 +46,15 @@ effortRoutes.get("/projects/:pid/efforts", async (c) => {
   const m = await requireMember(c);
   if (m instanceof Response) return m;
   return c.json({ efforts: await listEfforts(c.req.param("pid")) });
+});
+
+// GET /projects/:pid/efforts/:eid — the area cockpit.
+effortRoutes.get("/projects/:pid/efforts/:eid", async (c) => {
+  const m = await requireMember(c);
+  if (m instanceof Response) return m;
+  const d = await getEffortDetail(c.req.param("pid"), c.req.param("eid"));
+  if (!d) return c.json({ error: "Effort not found", code: "NOT_FOUND" }, 404);
+  return c.json(d);
 });
 
 const patchBody = z.object({

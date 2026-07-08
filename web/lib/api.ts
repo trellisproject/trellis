@@ -52,6 +52,12 @@ export type Effort = {
   assertions: EffortAssertion[];
 };
 export type Member = { principalId: string; name: string; kind: "human" | "agent"; role: string };
+export type EffortDetail = {
+  effort: Omit<Effort, "assertions">;
+  assertions: EffortAssertion[];
+  tasks: { id: string; title: string; status: string; priority: Priority; ownerName: string | null }[];
+  decisions: { id: string; choice: string; rationale: string; at: string; actorId: string }[];
+};
 export type LinkedFact = { relation: "supports" | "contradicts"; id: string; statement: string; observerId: string; evidence: { type: string; ref: string }[]; observedAt: string };
 export type StatusEvent = { id: string; status: AssertionStatus; note: string | null; at: string };
 export type AssertionDetail = {
