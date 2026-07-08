@@ -82,8 +82,8 @@ export default function WorklistPage({ params }: { params: Promise<{ pid: string
               <div className="card">
                 {items.map((item) => (
                   <div key={`${item.kind}-${item.id}`} className="row between">
-                    {item.kind === "assertion" || item.kind === "task" ? (
-                      <Link href={item.kind === "task" ? `/p/${pid}/t/${item.id}` : `/p/${pid}/a/${item.ref}`} className="flex" style={{ minWidth: 0 }} title="Open detail">
+                    {item.kind === "task" || item.kind === "assertion" || item.assertionRef ? (
+                      <Link href={item.kind === "task" ? `/p/${pid}/t/${item.id}` : `/p/${pid}/a/${item.kind === "assertion" ? item.ref : item.assertionRef}`} className="flex" style={{ minWidth: 0 }} title="Open detail">
                         <PriorityDot p={item.priority} />
                         <span className="aid">{item.ref}</span>
                         <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</span>

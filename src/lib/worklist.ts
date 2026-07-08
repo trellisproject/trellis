@@ -21,6 +21,7 @@ export type WorklistItem = {
   owner?: string | null; // derived from the item's effort owner
   dueInDays?: number | null; // derived from the item's effort deadline
   commitment?: boolean;
+  assertionRef?: string; // the assertion (human id) this item is about, for navigation
 };
 
 const RANK: Record<Priority, number> = { now: 0, normal: 1, later: 2 };
@@ -86,8 +87,14 @@ export async function worklist(projectId: string, opts?: { effortId?: string; ow
   const openChallenges = await db.select().from(challenges).where(and(eq(challenges.projectId, projectId), eq(challenges.status, "open")));
   const newRequests = await db.select().from(requests).where(and(eq(requests.projectId, projectId), eq(requests.status, "new")));
 
+  // Human ids for the drifted assertions, so a Decide row can open its hub.
+  const driftAssertionIds = [...new Set(openDrifts.map((d) => d.assertionId))];
+  const driftAHuman = driftAssertionIds.length
+    ? new Map((await db.select({ id: assertions.id, humanId: assertions.humanId }).from(assertions).where(inArray(assertions.id, driftAssertionIds))).map((r) => [r.id, r.humanId]))
+    : new Map<string, string>();
+
   const decide: WorklistItem[] = [
-    ...openDrifts.map((d) => withMeta({ bucket: "decide", kind: "drift", id: d.id, ref: d.kind, title: d.summary, priority: d.priority, action: "Resolve" }, metaByInternal.get(d.assertionId))),
+    ...openDrifts.map((d) => ({ ...withMeta({ bucket: "decide" as const, kind: "drift" as const, id: d.id, ref: d.kind, title: d.summary, priority: d.priority, action: "Resolve" }, metaByInternal.get(d.assertionId)), assertionRef: driftAHuman.get(d.assertionId) })),
     // Challenges and new requests aren't tied to an effort — inbox-level, unscoped only.
     ...(scoped ? [] : openChallenges.map((c) => ({ bucket: "decide" as const, kind: "challenge" as const, id: c.id, ref: "challenge", title: c.rationale, priority: "normal" as const, action: "Resolve" }))),
     ...(scoped ? [] : newRequests.map((r) => ({ bucket: "decide" as const, kind: "request" as const, id: r.id, ref: r.requester, title: r.title, priority: r.priority, action: "Accept / Decline" }))),

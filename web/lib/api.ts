@@ -65,7 +65,7 @@ export type AssertionDetail = {
 };
 export type TaskDetail = { task: Task; assertions: { id: string; humanId: string; title: string }[]; checkpoints: { id: string; note: string; at: string }[]; dependsOn: string[] };
 export type Priority = "now" | "normal" | "later";
-export type WorklistItem = { bucket: string; kind: "drift" | "challenge" | "request" | "assertion" | "task"; id: string; ref: string; title: string; priority: Priority; action: string; owner?: string | null; dueInDays?: number | null; commitment?: boolean };
+export type WorklistItem = { bucket: string; kind: "drift" | "challenge" | "request" | "assertion" | "task"; id: string; ref: string; title: string; priority: Priority; action: string; owner?: string | null; dueInDays?: number | null; commitment?: boolean; assertionRef?: string };
 export type Worklist = { buckets: Record<string, WorklistItem[]>; counts: Record<string, number> };
 export type Decision = { id: string; onType: string; onId: string; choice: string; rationale: string; at: string };
 export type Fact = { id: string; key: string; statement: string; observerId: string; evidence: { type: string; ref: string }[]; observedAt: string; metricKey: string | null; measuredValue: number | null };
