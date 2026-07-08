@@ -12,6 +12,7 @@ import { requestRoutes } from "./routes/requests.js";
 import { worklistRoutes } from "./routes/worklist.js";
 import { delegationRoutes } from "./routes/delegations.js";
 import { attachmentRoutes } from "./routes/attachments.js";
+import { diagramRoutes } from "./routes/diagrams.js";
 import { authenticate } from "./middleware/auth.js";
 import type { AppEnv } from "./types.js";
 
@@ -35,5 +36,6 @@ app.route("/", requestRoutes);
 app.route("/", worklistRoutes);
 app.route("/", delegationRoutes);
 app.route("/", attachmentRoutes);
+app.route("/", diagramRoutes);
 
 export type App = typeof app;

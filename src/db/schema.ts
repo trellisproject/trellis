@@ -443,6 +443,60 @@ export const requestAssertions = pgTable("request_assertions", {
     .notNull(),
 });
 
+// A flow diagram — one view in the hierarchical system map. `parentNodeId`
+// links it as the drill-down target of a node in the parent diagram; null = a
+// root map. `key` is a project-unique slug for routing.
+export const diagrams = pgTable(
+  "diagrams",
+  {
+    id: id(),
+    projectId: text("project_id").references(() => projects.id).notNull(),
+    key: text("key").notNull(),
+    title: text("title").notNull(),
+    description: text("description").default("").notNull(),
+    direction: text("direction").$type<"TD" | "LR">().notNull().default("TD"),
+    parentNodeId: text("parent_node_id"), // FK diagram_nodes.id (nullable) — root if null
+    createdAt: createdAt(),
+  },
+  (t) => [index("diagram_project_key").on(t.projectId, t.key)],
+);
+
+// A node/box in a diagram. It either drills into a child diagram (a diagram
+// whose parentNodeId === this node), anchors to a spec (effort or assertion —
+// the seam to intent, and where drift color comes from), or is a plain step.
+// `key` is alnum + mermaid-safe, unique within the diagram.
+export const diagramNodes = pgTable(
+  "diagram_nodes",
+  {
+    id: id(),
+    projectId: text("project_id").references(() => projects.id).notNull(),
+    diagramId: text("diagram_id").references(() => diagrams.id).notNull(),
+    key: text("key").notNull(),
+    label: text("label").notNull(),
+    kind: text("kind").$type<"step" | "decision" | "trigger" | "terminal" | "subflow">().notNull().default("step"),
+    effortId: text("effort_id").references(() => efforts.id),
+    assertionId: text("assertion_id").references(() => assertions.id),
+    order: integer("order").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [index("dnode_diagram").on(t.diagramId)],
+);
+
+// A directed edge with an optional trigger/condition label.
+export const diagramEdges = pgTable(
+  "diagram_edges",
+  {
+    id: id(),
+    projectId: text("project_id").references(() => projects.id).notNull(),
+    diagramId: text("diagram_id").references(() => diagrams.id).notNull(),
+    fromNodeId: text("from_node_id").references(() => diagramNodes.id).notNull(),
+    toNodeId: text("to_node_id").references(() => diagramNodes.id).notNull(),
+    label: text("label").default("").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("dedge_diagram").on(t.diagramId)],
+);
+
 // Supporting assets (designs, mockups, docs) attached to any object — an effort,
 // assertion, or task — stored in Vercel Blob. targetId is that object's id.
 export const attachments = pgTable(
