@@ -25,14 +25,18 @@ attachmentRoutes.post("/projects/:pid/attachments", async (c) => {
   if (!filename || !targetType || !targetId || !TARGETS.includes(targetType)) {
     return c.json({ error: "filename, target_type (effort|assertion|task), target_id required", code: "INVALID_INPUT" }, 422);
   }
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    return c.json({ error: "Attachments not configured — connect a Vercel Blob store to this project", code: "NO_BLOB_STORE" }, 503);
-  }
   const buf = await c.req.arrayBuffer();
   if (buf.byteLength === 0) return c.json({ error: "Empty file", code: "INVALID_INPUT" }, 422);
   if (buf.byteLength > MAX) return c.json({ error: "File too large (max ~4MB via this path)", code: "TOO_LARGE" }, 413);
   const contentType = c.req.header("content-type") || undefined;
-  const blob = await put(`${pid}/${filename}`, Buffer.from(buf), { access: "public", addRandomSuffix: true, contentType });
+  // Blob auth is resolved by the SDK: a BLOB_READ_WRITE_TOKEN if present, else
+  // the store's OIDC token (Vercel injects it when a store is connected).
+  let blob;
+  try {
+    blob = await put(`${pid}/${filename}`, Buffer.from(buf), { access: "public", addRandomSuffix: true, contentType });
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : "Blob upload failed — is a store connected to this project?", code: "UPLOAD_FAILED" }, 502);
+  }
   const row = (
     await db
       .insert(attachments)
@@ -59,7 +63,7 @@ attachmentRoutes.delete("/projects/:pid/attachments/:id", async (c) => {
   if (m instanceof Response) return m;
   const row = (await db.select().from(attachments).where(and(eq(attachments.id, c.req.param("id")), eq(attachments.projectId, c.req.param("pid")))))[0];
   if (!row) return c.json({ error: "Not found", code: "NOT_FOUND" }, 404);
-  try { if (process.env.BLOB_READ_WRITE_TOKEN) await del(row.url); } catch { /* best-effort */ }
+  try { await del(row.url); } catch { /* best-effort */ }
   await db.delete(attachments).where(eq(attachments.id, row.id));
   return c.json({ ok: true });
 });

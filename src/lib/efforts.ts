@@ -179,7 +179,7 @@ export async function changeEffort(projectId: string, effortId: string, input: C
   }
 
   await db.update(efforts).set({
-    title: input.title ?? e.title, status: input.status ?? e.status,
+    title: input.title ?? e.title, description: input.description ?? e.description, status: input.status ?? e.status,
     goalType: input.goalType ?? e.goalType, goalTarget: input.goalTarget !== undefined ? input.goalTarget : e.goalTarget,
     order: input.order ?? e.order, ownerId: input.ownerId !== undefined ? input.ownerId : e.ownerId,
     commitment: input.commitment ?? e.commitment, version: e.version + 1,
