@@ -10,7 +10,6 @@ const NAV = [
   { seg: "worklist", label: "Worklist" },
   { seg: "requests", label: "Requests" },
   { seg: "specs", label: "Specs" },
-  { seg: "map", label: "Map" },
   { seg: "roadmap", label: "Roadmap" },
   { seg: "facts", label: "Facts" },
   { seg: "history", label: "History" },
@@ -43,7 +42,7 @@ export default function ProjectLayout({ children, params }: { children: ReactNod
         <div className="brand"><span className="dot" /> Trellis</div>
         <nav className="nav">
           {NAV.map((n) => {
-            const active = pathname.includes(`/${n.seg}`);
+            const active = pathname.includes(`/${n.seg}`) || (n.seg === "specs" && pathname.includes(`/map`));
             return (
               <Link key={n.seg} href={`/p/${pid}/${n.seg}`} className={active ? "active" : ""}>
                 {n.label}

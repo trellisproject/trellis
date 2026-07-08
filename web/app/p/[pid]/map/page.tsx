@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, type DiagramSummary } from "@/lib/api";
 import { STATUS_COLOR, STATUS_LABEL } from "@/lib/diagram";
+import { SpecsTabs } from "@/components/SpecsTabs";
 
 export default function MapIndex({ params }: { params: Promise<{ pid: string }> }) {
   const { pid } = use(params);
@@ -25,7 +26,7 @@ export default function MapIndex({ params }: { params: Promise<{ pid: string }> 
   return (
     <>
       <div className="topbar">
-        <h1>Map</h1>
+        <SpecsTabs pid={pid} current="map" />
         <span className="sub">Visual flows over the specs — drill from the whole system down to each workflow, colored by drift.</span>
         <button className="btn" style={{ marginLeft: "auto" }} onClick={() => setCreating(true)}>+ New map</button>
       </div>

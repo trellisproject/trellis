@@ -6,6 +6,7 @@ import { api, type DiagramDetail, type DiagramNode, type Effort, type NodeKind }
 import { Mermaid } from "@/components/Mermaid";
 import { toMermaid, STATUS_COLOR, STATUS_LABEL } from "@/lib/diagram";
 import { DescriptionEditor } from "@/components/Description";
+import { SpecsTabs } from "@/components/SpecsTabs";
 
 const KINDS: NodeKind[] = ["step", "decision", "trigger", "terminal", "subflow"];
 const LEGEND = ["verified", "drifted", "progress", "none"] as const;
@@ -44,11 +45,13 @@ export default function DiagramPage({ params }: { params: Promise<{ pid: string;
   return (
     <>
       <div className="topbar">
-        <div className="flex" style={{ gap: 6, flexWrap: "wrap" }}>
+        <div className="flex" style={{ gap: 8, flexWrap: "wrap" }}>
+          <SpecsTabs pid={pid} current="map" />
+          <span className="mutedtext" style={{ fontSize: 15 }}>›</span>
           {d.breadcrumb.map((b, i) => (
             <span key={b.key} className="flex" style={{ gap: 6 }}>
               {i > 0 && <span className="mutedtext">›</span>}
-              {b.key === d.diagram.key ? <h1 style={{ fontSize: 20 }}>{b.title}</h1> : <Link href={`/p/${pid}/map/${b.key}`} className="mutedtext" style={{ fontSize: 15 }}>{b.title}</Link>}
+              {b.key === d.diagram.key ? <strong style={{ fontSize: 15 }}>{b.title}</strong> : <Link href={`/p/${pid}/map/${b.key}`} className="mutedtext" style={{ fontSize: 15 }}>{b.title}</Link>}
             </span>
           ))}
         </div>

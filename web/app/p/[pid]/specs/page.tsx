@@ -2,6 +2,7 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { api, type Spec } from "@/lib/api";
+import { SpecsTabs } from "@/components/SpecsTabs";
 
 export default function Specs({ params }: { params: Promise<{ pid: string }> }) {
   const { pid } = use(params);
@@ -18,7 +19,7 @@ export default function Specs({ params }: { params: Promise<{ pid: string }> }) 
   return (
     <>
       <div className="topbar">
-        <h1>Specs</h1>
+        <SpecsTabs pid={pid} current="specs" />
         <span className="sub">Structured intent — authored in Trellis, mirrored to git</span>
         <button className="btn" style={{ marginLeft: "auto" }} onClick={() => setCreating(true)}>+ New spec</button>
       </div>
