@@ -17,6 +17,7 @@ const goalEnum = z.enum(["checklist", "metric", "open"]);
 
 const createBody = z.object({
   title: z.string().min(1),
+  description: z.string().optional(),
   status: statusEnum.optional(),
   goal_type: goalEnum.optional(),
   goal_target: z.string().nullable().optional(),
@@ -34,7 +35,7 @@ effortRoutes.post("/projects/:pid/efforts", async (c) => {
   const b = createBody.safeParse(await c.req.json().catch(() => null));
   if (!b.success) return c.json({ error: "Invalid body", code: "INVALID_INPUT", issues: b.error.issues }, 422);
   const r = await createEffort(c.req.param("pid"), {
-    title: b.data.title, status: b.data.status, goalType: b.data.goal_type, goalTarget: b.data.goal_target,
+    title: b.data.title, description: b.data.description, status: b.data.status, goalType: b.data.goal_type, goalTarget: b.data.goal_target,
     order: b.data.order, targetDate: b.data.target_date, ownerId: b.data.owner_id, commitment: b.data.commitment, assertions: b.data.assertions,
   });
   if (!r.ok) return c.json({ error: r.error, code: r.code }, st(r.code));
@@ -59,6 +60,7 @@ effortRoutes.get("/projects/:pid/efforts/:eid", async (c) => {
 
 const patchBody = z.object({
   title: z.string().min(1).optional(),
+  description: z.string().optional(),
   status: statusEnum.optional(),
   goal_type: goalEnum.optional(),
   goal_target: z.string().nullable().optional(),
@@ -80,7 +82,7 @@ effortRoutes.patch("/projects/:pid/efforts/:eid", async (c) => {
   const b = patchBody.safeParse(await c.req.json().catch(() => null));
   if (!b.success) return c.json({ error: "Invalid body", code: "INVALID_INPUT" }, 422);
   const r = await changeEffort(c.req.param("pid"), c.req.param("eid"), {
-    title: b.data.title, status: b.data.status, goalType: b.data.goal_type, goalTarget: b.data.goal_target,
+    title: b.data.title, description: b.data.description, status: b.data.status, goalType: b.data.goal_type, goalTarget: b.data.goal_target,
     order: b.data.order, targetDate: b.data.target_date, ownerId: b.data.owner_id, commitment: b.data.commitment,
     addAssertions: b.data.add_assertions, removeAssertions: b.data.remove_assertions,
     decision: b.data.rationale !== undefined ? { actorId: m.principalId, rationale: b.data.rationale, alternatives: b.data.alternatives, delegatedById: b.data.delegated_by ?? null } : undefined,

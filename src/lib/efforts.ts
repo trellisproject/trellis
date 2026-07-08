@@ -90,7 +90,7 @@ export async function assertionsByEffort(projectId: string): Promise<Map<string,
 
 export async function createEffort(
   projectId: string,
-  input: { title: string; status?: EffortStatus; goalType?: GoalType; goalTarget?: string | null; order?: number; targetDate?: string | null; ownerId?: string | null; commitment?: boolean; assertions?: string[] },
+  input: { title: string; description?: string; status?: EffortStatus; goalType?: GoalType; goalTarget?: string | null; order?: number; targetDate?: string | null; ownerId?: string | null; commitment?: boolean; assertions?: string[] },
 ): Promise<Result<typeof efforts.$inferSelect>> {
   const resolved = await resolveAssertionIds(projectId, input.assertions ?? []);
   if (!resolved.ok) return resolved;
@@ -99,7 +99,7 @@ export async function createEffort(
       await tx
         .insert(efforts)
         .values({
-          projectId, title: input.title,
+          projectId, title: input.title, description: input.description ?? "",
           status: input.status ?? "next",
           goalType: input.goalType ?? "checklist",
           goalTarget: input.goalTarget ?? null,
@@ -118,6 +118,7 @@ export async function createEffort(
 
 export type ChangeInput = {
   title?: string;
+  description?: string;
   status?: EffortStatus;
   goalType?: GoalType;
   goalTarget?: string | null;
@@ -167,7 +168,7 @@ export async function changeEffort(projectId: string, effortId: string, input: C
         await tx.delete(effortAssertions).where(and(eq(effortAssertions.effortId, effortId), eq(effortAssertions.assertionId, aid)));
       }
       await tx.update(efforts).set({
-        title: input.title ?? e.title, status: input.status ?? e.status,
+        title: input.title ?? e.title, description: input.description ?? e.description, status: input.status ?? e.status,
         goalType: input.goalType ?? e.goalType, goalTarget: input.goalTarget !== undefined ? input.goalTarget : e.goalTarget,
         order: input.order ?? e.order, targetDate: input.targetDate !== undefined ? input.targetDate : e.targetDate,
         ownerId: input.ownerId !== undefined ? input.ownerId : e.ownerId, commitment: input.commitment ?? e.commitment,

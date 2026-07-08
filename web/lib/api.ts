@@ -37,7 +37,7 @@ export type EffortAssertion = {
 const COMPARATOR_SYM: Record<string, string> = { gte: "≥", gt: ">", lte: "≤", lt: "<", eq: "=" };
 export const targetLabel = (a: EffortAssertion) => a.metricKey ? `${COMPARATOR_SYM[a.metricComparator ?? "gte"]} ${a.metricTarget}${a.metricUnit ?? ""}` : null;
 export type Effort = {
-  id: string; title: string;
+  id: string; title: string; description?: string;
   status: "active" | "next" | "someday" | "done";
   goalType: "checklist" | "metric" | "open";
   goalTarget: string | null;

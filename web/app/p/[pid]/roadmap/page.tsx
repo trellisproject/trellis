@@ -200,6 +200,7 @@ function EffortCard({ pid, e, members, onStatus, onOwner, onAdd, onDeadline, dra
 
 function CreateEffortModal({ pid, members, onClose, onDone }: { pid: string; members: Member[]; onClose: () => void; onDone: () => void }) {
   const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
   const [status, setStatus] = useState<Effort["status"]>("next");
   const [goalType, setGoalType] = useState<Effort["goalType"]>("checklist");
   const [goalTarget, setGoalTarget] = useState("");
@@ -212,7 +213,7 @@ function CreateEffortModal({ pid, members, onClose, onDone }: { pid: string; mem
     setBusy(true); setError("");
     try {
       await api.post(`/projects/${pid}/efforts`, {
-        title, status, goal_type: goalType, goal_target: goalType === "metric" ? goalTarget : null,
+        title, description, status, goal_type: goalType, goal_target: goalType === "metric" ? goalTarget : null,
         owner_id: ownerId || null, target_date: targetDate || null, commitment,
       });
       onDone();
@@ -223,6 +224,8 @@ function CreateEffortModal({ pid, members, onClose, onDone }: { pid: string; mem
       <h3>New effort</h3>
       <label>What are you focusing on?</label>
       <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Extraction accuracy" />
+      <label>Description (optional)</label>
+      <textarea className="input" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What this area is — its scope, goals, context…" />
       <label>Owner (the person who owns this area end to end)</label>
       <select className="input" value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
         <option value="">unowned</option>

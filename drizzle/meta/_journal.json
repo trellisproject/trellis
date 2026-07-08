@@ -71,6 +71,13 @@
       "when": 1783460895813,
       "tag": "0009_task_effort_description",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1783475551941,
+      "tag": "0010_effort_description",
+      "breakpoints": true
     }
   ]
 }

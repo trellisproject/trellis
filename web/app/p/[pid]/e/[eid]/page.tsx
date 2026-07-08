@@ -17,10 +17,11 @@ export default function EffortDetailPage({ params }: { params: Promise<{ pid: st
   const [dating, setDating] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newTask, setNewTask] = useState("");
+  const [desc, setDesc] = useState("");
 
   async function load() {
     const r = await api.get<EffortDetail>(`/projects/${pid}/efforts/${eid}`).catch(() => null);
-    setD(r); setLoading(false);
+    setD(r); setDesc(r?.effort.description ?? ""); setLoading(false);
   }
   useEffect(() => { load(); }, [pid, eid]);
   useEffect(() => { api.get<{ members: Member[] }>(`/projects/${pid}/members`).then((r) => setMembers(r.members)).catch(() => {}); }, [pid]);
@@ -75,6 +76,18 @@ export default function EffortDetailPage({ params }: { params: Promise<{ pid: st
           </div>
           {e.goalType === "checklist" && <div className="progress"><span style={{ width: `${pct}%` }} /></div>}
           {e.goalType === "metric" && <div className="mutedtext" style={{ fontSize: 13 }}>Metric goal: <span style={{ color: "var(--text)" }}>{e.goalTarget || "(set a target)"}</span></div>}
+        </div></div>
+
+        {/* Description */}
+        <div className="section-label">Description</div>
+        <div className="card"><div className="row">
+          <textarea className="input" rows={3} value={desc} onChange={(ev) => setDesc(ev.target.value)} placeholder="What this area is — its scope, goals, links, context…" />
+          {desc !== (e.description ?? "") && (
+            <div className="flex" style={{ marginTop: 8 }}>
+              <button className="btn primary" onClick={() => patch({ description: desc })}>Save</button>
+              <button className="btn ghost" onClick={() => setDesc(e.description ?? "")}>Revert</button>
+            </div>
+          )}
         </div></div>
 
         {/* Assertions */}

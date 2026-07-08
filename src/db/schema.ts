@@ -386,6 +386,7 @@ export const efforts = pgTable("milestones", {
     .references(() => projects.id)
     .notNull(),
   title: text("title").notNull(),
+  description: text("description").default("").notNull(), // free-text detail (markdown)
   // Attention, not date: what you're on now vs later.
   status: text("status").$type<"active" | "next" | "someday" | "done">().notNull().default("next"),
   // How "done" is judged: a set of assertions, a metric threshold, or open-ended.
