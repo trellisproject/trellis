@@ -20,21 +20,15 @@ export function AssertionPickerModal({
   const [assertions, setAssertions] = useState<Assertion[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [rationale, setRationale] = useState("");
+  const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    (async () => {
-      const specs = await api.get<{ specs: { slug: string }[] }>(`/projects/${pid}/specs`);
-      const all: Assertion[] = [];
-      for (const s of specs.specs) {
-        const d = await api.get<{ assertions: Assertion[] }>(`/projects/${pid}/specs/${s.slug}`);
-        all.push(...d.assertions.filter((a) => a.status !== "retired"));
-      }
-      setAssertions(all);
-      setLoading(false);
-    })().catch((e) => { setError(e instanceof Error ? e.message : "Failed to load"); setLoading(false); });
+    api.get<{ assertions: Assertion[] }>(`/projects/${pid}/assertions`)
+      .then((d) => { setAssertions(d.assertions); setLoading(false); })
+      .catch((e) => { setError(e instanceof Error ? e.message : "Failed to load"); setLoading(false); });
   }, [pid]);
 
   function toggle(h: string) {
@@ -52,7 +46,8 @@ export function AssertionPickerModal({
   }
 
   const exclude = new Set(excludeHumanIds);
-  const available = assertions.filter((a) => !exclude.has(a.humanId));
+  const needle = q.trim().toLowerCase();
+  const available = assertions.filter((a) => !exclude.has(a.humanId) && (!needle || a.humanId.toLowerCase().includes(needle) || a.title.toLowerCase().includes(needle)));
   const canSubmit = selected.size > 0 && (!requireRationale || rationale.trim().length > 0);
 
   return (
@@ -62,21 +57,25 @@ export function AssertionPickerModal({
         <p className="mutedtext" style={{ fontSize: 13, marginTop: 4 }}>{subtitle}</p>
         {loading ? (
           <div className="empty">Loading assertions…</div>
-        ) : available.length === 0 ? (
-          <div className="empty" style={{ padding: 24 }}>No unassigned assertions. Author them in the spec file and ingest first.</div>
+        ) : assertions.length === 0 ? (
+          <div className="empty" style={{ padding: 24 }}>No assertions yet. Author them first.</div>
         ) : (
-          <div style={{ maxHeight: 300, overflowY: "auto", border: "1px solid var(--border)", borderRadius: 8 }}>
-            {available.map((a) => (
-              <label key={a.humanId} className="row between" style={{ display: "flex", cursor: "pointer" }}>
-                <div className="flex" style={{ minWidth: 0 }}>
-                  <input type="checkbox" checked={selected.has(a.humanId)} onChange={() => toggle(a.humanId)} />
-                  <span className="aid">{a.humanId}</span>
-                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.title}</span>
-                </div>
-                <Badge status={a.status} />
-              </label>
-            ))}
-          </div>
+          <>
+            <input className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by id or title…" style={{ marginBottom: 8 }} autoFocus />
+            <div style={{ maxHeight: 320, overflowY: "auto", border: "1px solid var(--border)", borderRadius: 8 }}>
+              {available.length === 0 ? (
+                <div className="empty" style={{ padding: 20 }}>{needle ? "No matches." : "All assertions are already in this effort."}</div>
+              ) : available.map((a) => (
+                <label key={a.humanId} style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer", padding: "9px 12px", borderBottom: "1px solid var(--border)" }}>
+                  <input type="checkbox" checked={selected.has(a.humanId)} onChange={() => toggle(a.humanId)} style={{ flexShrink: 0 }} />
+                  <span className="aid" style={{ flexShrink: 0, whiteSpace: "nowrap", minWidth: 96 }}>{a.humanId}</span>
+                  <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.title}</span>
+                  <Badge status={a.status} />
+                </label>
+              ))}
+            </div>
+            <div className="mutedtext" style={{ fontSize: 12, marginTop: 6 }}>{available.length} shown{selected.size ? ` · ${selected.size} selected` : ""}</div>
+          </>
         )}
         {requireRationale && (
           <>

@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, ne } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { assertions, specs } from "../db/schema.js";
 import { ingestSpec } from "../lib/ingest.js";
@@ -89,6 +89,19 @@ specRoutes.get("/projects/:pid/specs/:slug/export", async (c) => {
   const md = await renderSpec(c.req.param("pid"), c.req.param("slug"));
   if (md === null) return c.json({ error: "Spec not found", code: "NOT_FOUND" }, 404);
   return c.text(md);
+});
+
+// GET /projects/:pid/assertions — every assertion in the project in one query
+// (powers the picker; the per-spec fetch was an N+1). Retired excluded.
+specRoutes.get("/projects/:pid/assertions", async (c) => {
+  const m = await requireMember(c);
+  if (m instanceof Response) return m;
+  const rows = await db
+    .select({ id: assertions.id, humanId: assertions.humanId, title: assertions.title, statement: assertions.statement, status: assertions.status })
+    .from(assertions)
+    .where(and(eq(assertions.projectId, c.req.param("pid")), ne(assertions.status, "retired")))
+    .orderBy(asc(assertions.humanId));
+  return c.json({ assertions: rows });
 });
 
 // GET /projects/:pid/assertions/:humanId — the hub: statement, status,
