@@ -28,6 +28,7 @@ export default function Roadmap({ params }: { params: Promise<{ pid: string }> }
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
+  const [datingEffort, setDatingEffort] = useState<Effort | null>(null);
 
   async function load() {
     const d = await api.get<{ efforts: Effort[] }>(`/projects/${pid}/efforts`);
@@ -77,7 +78,7 @@ export default function Roadmap({ params }: { params: Promise<{ pid: string }> }
             {efforts.some((e) => e.dueSoon) && (
               <div>
                 <div className="section-label" style={{ color: "var(--red)" }}>⏰ Due soon — commitments pulled into focus · {efforts.filter((e) => e.dueSoon).length}</div>
-                {efforts.filter((e) => e.dueSoon).map((e) => <EffortCard key={e.id} pid={pid} e={e} members={members} onStatus={setStatus} onOwner={setOwner} onAdd={() => setAddingTo(e)} />)}
+                {efforts.filter((e) => e.dueSoon).map((e) => <EffortCard key={e.id} pid={pid} e={e} members={members} onStatus={setStatus} onOwner={setOwner} onAdd={() => setAddingTo(e)} onDeadline={() => setDatingEffort(e)} />)}
               </div>
             )}
             {GROUPS.map((g) => {
@@ -91,7 +92,7 @@ export default function Roadmap({ params }: { params: Promise<{ pid: string }> }
                       onDragOver={(ev) => { if (dragId && dragId !== e.id) ev.preventDefault(); }}
                       onDrop={() => { if (dragId) reorder(items, dragId, e.id); setDragId(null); }}
                       style={{ opacity: dragId === e.id ? 0.4 : 1 }}>
-                      <EffortCard pid={pid} e={e} members={members} onStatus={setStatus} onOwner={setOwner} onAdd={() => setAddingTo(e)} drag={{ onStart: () => setDragId(e.id), onEnd: () => setDragId(null) }} />
+                      <EffortCard pid={pid} e={e} members={members} onStatus={setStatus} onOwner={setOwner} onAdd={() => setAddingTo(e)} onDeadline={() => setDatingEffort(e)} drag={{ onStart: () => setDragId(e.id), onEnd: () => setDragId(null) }} />
                     </div>
                   ))}
                 </div>
@@ -101,6 +102,7 @@ export default function Roadmap({ params }: { params: Promise<{ pid: string }> }
         )}
       </div>
       {creating && <CreateEffortModal pid={pid} members={members} onClose={() => setCreating(false)} onDone={() => { setCreating(false); setLoading(true); load(); }} />}
+      {datingEffort && <DeadlineModal pid={pid} e={datingEffort} onClose={() => setDatingEffort(null)} onDone={() => { setDatingEffort(null); load(); }} />}
       {addingTo && (
         <AssertionPickerModal
           pid={pid}
@@ -116,46 +118,62 @@ export default function Roadmap({ params }: { params: Promise<{ pid: string }> }
   );
 }
 
-function EffortCard({ pid, e, members, onStatus, onOwner, onAdd, drag }: { pid: string; e: Effort; members: Member[]; onStatus: (e: Effort, s: Effort["status"]) => void; onOwner: (e: Effort, ownerId: string) => void; onAdd: () => void; drag?: { onStart: () => void; onEnd: () => void } }) {
+const STATUSES = ["active", "next", "someday", "done"] as const;
+
+function EffortCard({ pid, e, members, onStatus, onOwner, onAdd, onDeadline, drag }: { pid: string; e: Effort; members: Member[]; onStatus: (e: Effort, s: Effort["status"]) => void; onOwner: (e: Effort, ownerId: string) => void; onAdd: () => void; onDeadline: () => void; drag?: { onStart: () => void; onEnd: () => void } }) {
   const pct = e.progress.total === 0 ? 0 : Math.round((e.progress.verified / e.progress.total) * 100);
   return (
     <div className="card">
       <div className="row">
-        <div className="between" style={{ marginBottom: 10 }}>
-          <div className="flex" style={{ minWidth: 0 }}>
-            {drag && <span draggable onDragStart={drag.onStart} onDragEnd={drag.onEnd} title="Drag to reorder" style={{ cursor: "grab", color: "var(--muted)", userSelect: "none", fontSize: 15, lineHeight: 1 }}>⠿</span>}
-            <strong>{e.title}</strong><span className="pill" style={{ textTransform: "capitalize" }}>{e.goalType}</span><DueBadge e={e} /></div>
-          <div className="flex">
-            <select className="mini-select" value={e.ownerId ?? ""} onChange={(ev) => onOwner(e, ev.target.value)} title="Owner">
+        {/* Title */}
+        <div className="flex" style={{ minWidth: 0, marginBottom: 10 }}>
+          {drag && <span draggable onDragStart={drag.onStart} onDragEnd={drag.onEnd} title="Drag to reorder" style={{ cursor: "grab", color: "var(--muted)", userSelect: "none", fontSize: 15, lineHeight: 1 }}>⠿</span>}
+          <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.title}</strong>
+          <span className="pill" style={{ textTransform: "capitalize" }}>{e.goalType}</span>
+          <DueBadge e={e} />
+        </div>
+
+        {/* Meta: attention · owner · deadline */}
+        <div className="flex" style={{ gap: 16, flexWrap: "wrap", alignItems: "center", fontSize: 13, paddingBottom: 12, marginBottom: 12, borderBottom: "1px solid var(--border)" }}>
+          <label className="flex" style={{ gap: 6 }}>
+            <span className="mutedtext">Attention</span>
+            <select className="mini-select" value={e.status} onChange={(ev) => onStatus(e, ev.target.value as Effort["status"])}>
+              {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </label>
+          <label className="flex" style={{ gap: 6 }}>
+            <span className="mutedtext">Owner</span>
+            <select className="mini-select" value={e.ownerId ?? ""} onChange={(ev) => onOwner(e, ev.target.value)}>
               <option value="">unowned</option>
               {members.map((m) => <option key={m.principalId} value={m.principalId}>{m.name}</option>)}
             </select>
-            <button className="btn ghost" onClick={onAdd}>+ Add assertions</button>
-            <select className="mini-select" value={e.status} onChange={(ev) => onStatus(e, ev.target.value as Effort["status"])}>
-              <option value="active">active</option><option value="next">next</option><option value="someday">someday</option><option value="done">done</option>
-            </select>
-          </div>
+          </label>
+          <label className="flex" style={{ gap: 6 }}>
+            <span className="mutedtext">Deadline</span>
+            <button className="mini-select" onClick={onDeadline} title="Set or change the deadline (a decision)" style={{ cursor: "pointer", color: e.targetDate ? (e.commitment ? "var(--red)" : "var(--text)") : "var(--muted)" }}>
+              {e.targetDate ? `${e.targetDate}${e.commitment ? " · commitment" : ""}` : "+ set"}
+            </button>
+          </label>
         </div>
+
+        {/* Progress / goal */}
         {e.goalType === "metric" ? (
           e.assertions.length === 0 ? (
             <div className="mutedtext" style={{ fontSize: 13 }}>Goal: <span style={{ color: "var(--text)" }}>{e.goalTarget || "(set a target)"}</span><span style={{ marginLeft: 10, opacity: 0.7 }}>· add a metric assertion to track it live</span></div>
           ) : (
-            <div className="between">
-              <span className="mutedtext" style={{ fontSize: 13 }}>{e.progress.verified} of {e.progress.total} metrics on target</span>
-            </div>
+            <span className="mutedtext" style={{ fontSize: 13 }}>{e.progress.verified} of {e.progress.total} metrics on target</span>
           )
         ) : e.goalType === "open" ? (
           <div className="mutedtext" style={{ fontSize: 13 }}>Open-ended · {e.assertions.length} assertion{e.assertions.length === 1 ? "" : "s"} · ship increments as they come</div>
         ) : (
           <>
-            <div className="between" style={{ marginBottom: 6 }}>
-              <span className="mutedtext" style={{ fontSize: 13 }}>{e.progress.verified} of {e.progress.total} verified</span>
-              {e.targetDate && <span className="mutedtext" style={{ fontSize: 12 }}>target {e.targetDate}</span>}
-            </div>
+            <div className="mutedtext" style={{ fontSize: 13, marginBottom: 6 }}>{e.progress.verified} of {e.progress.total} verified</div>
             <div className="progress"><span style={{ width: `${pct}%` }} /></div>
           </>
         )}
       </div>
+
+      {/* Assertions */}
       {e.assertions.map((a) => (
         <Link key={a.humanId} href={`/p/${pid}/a/${a.humanId}`} className="row between" style={{ display: "flex" }}>
           <div className="flex" style={{ minWidth: 0 }}><span className="aid">{a.humanId}</span><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.title}</span></div>
@@ -171,7 +189,46 @@ function EffortCard({ pid, e, members, onStatus, onOwner, onAdd, drag }: { pid: 
           </div>
         </Link>
       ))}
+
+      <div className="row"><button className="btn ghost" style={{ fontSize: 13 }} onClick={onAdd}>+ Add assertions</button></div>
     </div>
+  );
+}
+
+function DeadlineModal({ pid, e, onClose, onDone }: { pid: string; e: Effort; onClose: () => void; onDone: () => void }) {
+  const [date, setDate] = useState(e.targetDate ?? "");
+  const [commitment, setCommitment] = useState(e.commitment);
+  const [why, setWhy] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const dateChanged = (date || "") !== (e.targetDate ?? "");
+  async function save(clear: boolean) {
+    setBusy(true); setError("");
+    try {
+      const changesDate = clear ? !!e.targetDate : dateChanged;
+      await api.patch(`/projects/${pid}/efforts/${e.id}`, { target_date: clear ? null : (date || null), commitment: clear ? false : commitment, rationale: changesDate ? why : undefined });
+      onDone();
+    } catch (err) { setError(err instanceof Error ? err.message : "Failed"); setBusy(false); }
+  }
+  return (
+    <div className="modal-backdrop" onClick={onClose}><div className="modal" onClick={(ev) => ev.stopPropagation()}>
+      <h3>Deadline — {e.title}</h3>
+      <label>Date</label>
+      <input className="input" type="date" value={date} onChange={(ev) => setDate(ev.target.value)} autoFocus />
+      <label className="flex" style={{ fontSize: 13, cursor: "pointer", marginTop: 4 }}>
+        <input type="checkbox" checked={commitment} onChange={(ev) => setCommitment(ev.target.checked)} /> Client commitment — pull into focus ~a week ahead
+      </label>
+      <label>Rationale{dateChanged ? " (required — changing a date is a decision)" : " (optional)"}</label>
+      <textarea className="input" rows={2} value={why} onChange={(ev) => setWhy(ev.target.value)} placeholder="Why this date?" />
+      {error && <p style={{ color: "var(--red)", fontSize: 13 }}>{error}</p>}
+      <div className="between" style={{ marginTop: 16 }}>
+        {e.targetDate ? <button className="btn ghost" onClick={() => save(true)} disabled={busy || !why.trim()} style={{ color: "var(--red)" }}>Clear deadline</button> : <span />}
+        <div className="flex">
+          <button className="btn ghost" onClick={onClose}>Cancel</button>
+          <button className="btn primary" onClick={() => save(false)} disabled={busy || !date || (dateChanged && !why.trim())}>Save</button>
+        </div>
+      </div>
+    </div></div>
   );
 }
 
