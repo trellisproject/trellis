@@ -4,6 +4,7 @@ import Link from "next/link";
 import { api, targetLabel, type Effort, type EffortAssertion, type Member } from "@/lib/api";
 import { Badge } from "@/components/Badge";
 import { AssertionPickerModal } from "@/components/AssertionPickerModal";
+import { useScrollRestore } from "@/lib/scroll";
 
 function DueBadge({ e }: { e: Effort }) {
   if (e.dueInDays == null || !e.dueSoon) return null;
@@ -29,6 +30,7 @@ export default function Roadmap({ params }: { params: Promise<{ pid: string }> }
   const [creating, setCreating] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
   const [datingEffort, setDatingEffort] = useState<Effort | null>(null);
+  useScrollRestore(!loading);
 
   async function load() {
     const d = await api.get<{ efforts: Effort[] }>(`/projects/${pid}/efforts`);

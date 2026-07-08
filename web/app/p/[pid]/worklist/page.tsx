@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api, type Worklist, type WorklistItem, type Priority, type Effort, type Member } from "@/lib/api";
 import { AssertionPickerModal } from "@/components/AssertionPickerModal";
+import { useScrollRestore } from "@/lib/scroll";
 
 const BUCKETS: { key: string; label: string; blurb: string }[] = [
   { key: "decide", label: "Decide", blurb: "A judgment is owed — drifts, challenges, new requests" },
@@ -30,6 +31,7 @@ export default function WorklistPage({ params }: { params: Promise<{ pid: string
   const [efforts, setEfforts] = useState<Effort[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [scope, setScope] = useState<string>("all"); // "all" | "effort:<id>" | "owner:<id>"
+  useScrollRestore(!!wl);
 
   async function load() {
     const q = scope.startsWith("effort:") ? `?effort=${scope.slice(7)}` : scope.startsWith("owner:") ? `?owner=${scope.slice(6)}` : "";

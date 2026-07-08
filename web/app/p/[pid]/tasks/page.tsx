@@ -2,6 +2,7 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { api, type Task, type Effort, type Member } from "@/lib/api";
+import { useScrollRestore } from "@/lib/scroll";
 
 const PRIORITIES = ["now", "normal", "later"] as const;
 
@@ -12,6 +13,7 @@ export default function Tasks({ params }: { params: Promise<{ pid: string }> }) 
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  useScrollRestore(!loading);
 
   async function load() {
     const d = await api.get<{ tasks: Task[] }>(`/projects/${pid}/tasks`);

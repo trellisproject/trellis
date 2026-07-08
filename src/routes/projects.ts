@@ -105,6 +105,26 @@ projectRoutes.post("/projects/:pid/tokens", async (c) => {
   return c.json({ principal, token: raw }, 201);
 });
 
+// PATCH /projects/:pid/members/:principalId — change a member's role (operator
+// only). Promoting a human to operator lets them decide directly; agents get
+// decision authority via delegations, not role. Won't strand the last operator.
+projectRoutes.patch("/projects/:pid/members/:principalId", async (c) => {
+  const op = await requireOperator(c);
+  if (op instanceof Response) return op;
+  const pid = c.req.param("pid");
+  const target = c.req.param("principalId");
+  const b = z.object({ role: z.enum(["operator", "member"]) }).safeParse(await c.req.json().catch(() => null));
+  if (!b.success) return c.json({ error: "role must be operator|member", code: "INVALID_INPUT" }, 422);
+  const mem = (await db.select().from(memberships).where(and(eq(memberships.projectId, pid), eq(memberships.principalId, target))))[0];
+  if (!mem) return c.json({ error: "Not a member of this project", code: "NOT_FOUND" }, 404);
+  if (mem.role === "operator" && b.data.role === "member") {
+    const ops = await db.select().from(memberships).where(and(eq(memberships.projectId, pid), eq(memberships.role, "operator")));
+    if (ops.length <= 1) return c.json({ error: "Can't demote the last operator", code: "LAST_OPERATOR" }, 409);
+  }
+  await db.update(memberships).set({ role: b.data.role }).where(and(eq(memberships.projectId, pid), eq(memberships.principalId, target)));
+  return c.json({ principalId: target, role: b.data.role });
+});
+
 // GET /projects — projects the caller is a member of (TRL-API-010).
 projectRoutes.get("/projects", async (c) => {
   const principalId = c.get("principalId");
