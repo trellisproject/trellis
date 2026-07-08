@@ -6,7 +6,7 @@ import { and, eq, or } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { assertions, diagrams } from "../db/schema.js";
 import { requireMember } from "../middleware/auth.js";
-import { createDiagram, createEdge, createNode, deleteDiagram, deleteEdge, deleteNode, getDiagram, listDiagrams, updateNode } from "../lib/diagrams.js";
+import { createDiagram, createEdge, createNode, deleteDiagram, deleteEdge, deleteNode, getDiagram, listDiagrams, updateDiagram, updateNode } from "../lib/diagrams.js";
 import type { AppEnv } from "../types.js";
 
 export const diagramRoutes = new Hono<AppEnv>();
@@ -43,6 +43,16 @@ diagramRoutes.post("/projects/:pid/diagrams", async (c) => {
   if (!b.success) return c.json({ error: "Invalid input", code: "INVALID_INPUT", detail: b.error.flatten() }, 422);
   const r = await createDiagram(c.req.param("pid"), { title: b.data.title, description: b.data.description, direction: b.data.direction, parentNodeId: b.data.parent_node_id ?? null });
   return r.ok ? c.json({ diagram: r.value }, 201) : c.json({ error: r.error, code: r.code }, 400);
+});
+
+const patchDiagramBody = z.object({ title: z.string().min(1).optional(), description: z.string().optional(), direction: z.enum(["TD", "LR"]).optional() });
+diagramRoutes.patch("/projects/:pid/diagrams/:id", async (c) => {
+  const m = await requireMember(c);
+  if (m instanceof Response) return m;
+  const b = patchDiagramBody.safeParse(await c.req.json().catch(() => ({})));
+  if (!b.success) return c.json({ error: "Invalid input", code: "INVALID_INPUT", detail: b.error.flatten() }, 422);
+  await updateDiagram(c.req.param("pid"), c.req.param("id"), { title: b.data.title, description: b.data.description, direction: b.data.direction });
+  return c.json({ ok: true });
 });
 
 const nodeBody = z.object({ label: z.string().min(1), key: z.string().optional(), kind: z.enum(["step", "decision", "trigger", "terminal", "subflow"]).optional(), effort_id: z.string().nullish(), assertion: z.string().nullish() });

@@ -10,6 +10,7 @@ const NAV = [
   { seg: "worklist", label: "Worklist" },
   { seg: "requests", label: "Requests" },
   { seg: "specs", label: "Specs" },
+  { seg: "map", label: "Map" },
   { seg: "roadmap", label: "Roadmap" },
   { seg: "facts", label: "Facts" },
   { seg: "history", label: "History" },

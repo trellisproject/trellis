@@ -137,6 +137,12 @@ export async function createDiagram(projectId: string, input: { title: string; d
   return { ok: true, value: row };
 }
 
+export async function updateDiagram(projectId: string, diagramId: string, input: Partial<{ title: string; description: string; direction: "TD" | "LR" }>) {
+  const patch: Record<string, unknown> = {};
+  for (const k of ["title", "description", "direction"] as const) if (input[k] !== undefined) patch[k] = input[k];
+  if (Object.keys(patch).length) await db.update(diagrams).set(patch).where(and(eq(diagrams.id, diagramId), eq(diagrams.projectId, projectId)));
+}
+
 export async function createNode(projectId: string, diagramId: string, input: { label: string; key?: string; kind?: typeof diagramNodes.$inferSelect["kind"]; effortId?: string | null; assertionId?: string | null }): Promise<Result<typeof diagramNodes.$inferSelect>> {
   const existing = await db.select({ key: diagramNodes.key, order: diagramNodes.order }).from(diagramNodes).where(eq(diagramNodes.diagramId, diagramId));
   const key = keyify(input.key || input.label, new Set(existing.map((r) => r.key)));

@@ -150,6 +150,8 @@ label { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 5px
 .mermaid-host { display: flex; justify-content: center; overflow-x: auto; padding: 8px 0; }
 .mermaid-host svg { max-width: 100%; height: auto; }
 .mermaid-error { color: var(--red); font-size: 12px; white-space: pre-wrap; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+.statusdot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+.mermaid-host g.node:hover { filter: brightness(1.2); }
 
 /* Attachments */
 .attach { width: 128px; display: flex; flex-direction: column; gap: 4px; }
