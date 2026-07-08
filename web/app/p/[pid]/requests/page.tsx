@@ -41,13 +41,13 @@ export default function Requests({ params }: { params: Promise<{ pid: string }> 
           <div key={r.id} className="card">
             <div className="row">
               <div className="between">
-                <div className="stack">
+                <div className="stack" style={{ minWidth: 0 }}>
                   <div className="flex"><strong>{r.title}</strong>{statusPill(r)}</div>
                   <div className="mutedtext" style={{ fontSize: 13 }}>{r.requester}{r.source ? ` · via ${r.source}` : ""}</div>
                   {r.body && <div className="mutedtext" style={{ fontSize: 13 }}>{r.body}</div>}
                 </div>
-                <div className="flex">
-                  {r.status === "new" && <button className="btn" onClick={() => setDecide(r)}>Accept / Decline</button>}
+                <div className="flex" style={{ flexShrink: 0, alignSelf: "flex-start", whiteSpace: "nowrap" }}>
+                  {r.status === "new" && <button className="btn" onClick={() => setDecide(r)}>Decide</button>}
                   {r.status === "accepted" && !r.shipped && <button className="btn ghost" onClick={() => setLinking(r)}>Link assertions</button>}
                 </div>
               </div>
