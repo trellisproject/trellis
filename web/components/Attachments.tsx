@@ -3,14 +3,16 @@ import { useEffect, useRef, useState } from "react";
 import { api, type Attachment } from "@/lib/api";
 
 const fmtSize = (n: number | null) => (n == null ? "" : n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`);
+const canFrame = (ct: string | null) => ct === "application/pdf" || (ct?.startsWith("text/") ?? false);
 
 // Supporting assets (designs, mockups, docs) on an effort/assertion/task.
 // Files live in a PRIVATE Blob store; bytes are fetched through the API with
 // the caller's bearer token and rendered via local object URLs — never a
-// public URL. Image thumbnails are prefetched; other files download on click.
+// public URL. Clicking an item opens an in-app preview; download is a choice.
 export function Attachments({ pid, targetType, targetId }: { pid: string; targetType: string; targetId: string }) {
   const [items, setItems] = useState<Attachment[]>([]);
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
+  const [preview, setPreview] = useState<{ a: Attachment; url: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
@@ -33,6 +35,12 @@ export function Attachments({ pid, targetType, targetId }: { pid: string; target
     } catch { /* ignore */ }
   }
   useEffect(() => { load(); return revokeAll; /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [pid, targetType, targetId]);
+  useEffect(() => {
+    if (!preview) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setPreview(null);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [preview]);
 
   async function onFile(file: File | undefined) {
     if (!file) return;
@@ -44,15 +52,12 @@ export function Attachments({ pid, targetType, targetId }: { pid: string; target
     finally { setBusy(false); if (fileRef.current) fileRef.current.value = ""; }
   }
 
-  async function open(a: Attachment) {
+  async function openPreview(a: Attachment) {
     try {
       const cached = thumbs[a.id];
-      const u = cached ?? (await api.blob(`/projects/${pid}/attachments/${a.id}/content`));
-      const link = document.createElement("a");
-      link.href = u;
-      if (a.contentType?.startsWith("image/")) { link.target = "_blank"; link.rel = "noreferrer"; } else { link.download = a.filename; }
-      document.body.appendChild(link); link.click(); link.remove();
-      if (!cached) setTimeout(() => URL.revokeObjectURL(u), 15000);
+      const url = cached ?? (await api.blob(`/projects/${pid}/attachments/${a.id}/content`));
+      if (!cached) urlsRef.current.push(url);
+      setPreview({ a, url });
     } catch (e) { setError(e instanceof Error ? e.message : "Could not open file"); }
   }
 
@@ -63,7 +68,7 @@ export function Attachments({ pid, targetType, targetId }: { pid: string; target
           const isImg = a.contentType?.startsWith("image/");
           return (
             <div key={a.id} className="attach">
-              <button className="attach-open" onClick={() => open(a)} title={a.filename}>
+              <button className="attach-open" onClick={() => openPreview(a)} title={a.filename}>
                 {isImg && thumbs[a.id]
                   ? <img src={thumbs[a.id]} alt={a.filename} />
                   : <div className="attach-file">{isImg ? "🖼" : (a.filename.split(".").pop() || "file").toUpperCase()}</div>}
@@ -79,6 +84,27 @@ export function Attachments({ pid, targetType, targetId }: { pid: string; target
       </div>
       <input ref={fileRef} type="file" style={{ display: "none" }} onChange={(e) => onFile(e.target.files?.[0])} />
       {error && <p style={{ color: "var(--red)", fontSize: 13, marginTop: 8 }}>{error}</p>}
+
+      {preview && (
+        <div className="modal-backdrop" onClick={() => setPreview(null)}>
+          <div className="preview" onClick={(e) => e.stopPropagation()}>
+            <div className="between" style={{ marginBottom: 12, gap: 12 }}>
+              <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{preview.a.filename} <span className="mutedtext" style={{ fontWeight: 400, fontSize: 12 }}>{fmtSize(preview.a.size)}</span></strong>
+              <div className="flex" style={{ gap: 8, flexShrink: 0 }}>
+                <a className="btn" href={preview.url} download={preview.a.filename}>Download</a>
+                <button className="btn ghost" onClick={() => setPreview(null)}>Close</button>
+              </div>
+            </div>
+            <div className="preview-body">
+              {preview.a.contentType?.startsWith("image/")
+                ? <img src={preview.url} alt={preview.a.filename} />
+                : canFrame(preview.a.contentType)
+                  ? <iframe src={preview.url} title={preview.a.filename} />
+                  : <div className="empty">No inline preview for this file type — use Download.</div>}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
