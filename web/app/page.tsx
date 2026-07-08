@@ -18,6 +18,9 @@ export default function Connect() {
     if (s) {
       setApiUrl(s.apiUrl);
       setToken(s.token);
+    } else if (!window.location.hostname.includes("localhost")) {
+      // Deployed: pre-fill the prod API so teammates only paste a token.
+      setApiUrl(process.env.NEXT_PUBLIC_TRELLIS_API || "https://trellis-sepia-omega.vercel.app");
     }
   }, []);
 
