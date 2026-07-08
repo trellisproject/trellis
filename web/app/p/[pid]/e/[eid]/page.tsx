@@ -6,6 +6,7 @@ import { Badge } from "@/components/Badge";
 import { BackButton } from "@/components/BackButton";
 import { DeadlineModal } from "@/components/DeadlineModal";
 import { AssertionPickerModal } from "@/components/AssertionPickerModal";
+import { DescriptionEditor } from "@/components/Description";
 
 const STATUSES = ["active", "next", "someday", "done"] as const;
 
@@ -17,11 +18,10 @@ export default function EffortDetailPage({ params }: { params: Promise<{ pid: st
   const [dating, setDating] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newTask, setNewTask] = useState("");
-  const [desc, setDesc] = useState("");
 
   async function load() {
     const r = await api.get<EffortDetail>(`/projects/${pid}/efforts/${eid}`).catch(() => null);
-    setD(r); setDesc(r?.effort.description ?? ""); setLoading(false);
+    setD(r); setLoading(false);
   }
   useEffect(() => { load(); }, [pid, eid]);
   useEffect(() => { api.get<{ members: Member[] }>(`/projects/${pid}/members`).then((r) => setMembers(r.members)).catch(() => {}); }, [pid]);
@@ -81,13 +81,7 @@ export default function EffortDetailPage({ params }: { params: Promise<{ pid: st
         {/* Description */}
         <div className="section-label">Description</div>
         <div className="card"><div className="row">
-          <textarea className="input" rows={3} value={desc} onChange={(ev) => setDesc(ev.target.value)} placeholder="What this area is — its scope, goals, links, context…" />
-          {desc !== (e.description ?? "") && (
-            <div className="flex" style={{ marginTop: 8 }}>
-              <button className="btn primary" onClick={() => patch({ description: desc })}>Save</button>
-              <button className="btn ghost" onClick={() => setDesc(e.description ?? "")}>Revert</button>
-            </div>
-          )}
+          <DescriptionEditor value={e.description ?? ""} onSave={(v) => patch({ description: v })} placeholder="What this area is — its scope, goals, links, context…" />
         </div></div>
 
         {/* Assertions */}

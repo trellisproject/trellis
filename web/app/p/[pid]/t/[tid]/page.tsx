@@ -3,6 +3,7 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { api, type TaskDetail, type Effort, type Member } from "@/lib/api";
 import { BackButton } from "@/components/BackButton";
+import { DescriptionEditor } from "@/components/Description";
 
 const STATUSES = ["open", "in_progress", "done", "blocked"] as const;
 
@@ -11,12 +12,11 @@ export default function TaskPage({ params }: { params: Promise<{ pid: string; ti
   const [d, setD] = useState<TaskDetail | null>(null);
   const [efforts, setEfforts] = useState<Effort[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
-  const [desc, setDesc] = useState("");
   const [loading, setLoading] = useState(true);
 
   async function load() {
     const detail = await api.get<TaskDetail>(`/tasks/${tid}`);
-    setD(detail); setDesc(detail.task.description ?? ""); setLoading(false);
+    setD(detail); setLoading(false);
   }
   useEffect(() => { load(); }, [pid, tid]);
   useEffect(() => {
@@ -59,13 +59,7 @@ export default function TaskPage({ params }: { params: Promise<{ pid: string; ti
 
         <div className="section-label">Detail</div>
         <div className="card"><div className="row">
-          <textarea className="input" rows={4} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="What needs doing, links, context…" />
-          {desc !== (t.description ?? "") && (
-            <div className="flex" style={{ marginTop: 8 }}>
-              <button className="btn primary" onClick={() => patch({ description: desc })}>Save</button>
-              <button className="btn ghost" onClick={() => setDesc(t.description ?? "")}>Revert</button>
-            </div>
-          )}
+          <DescriptionEditor value={t.description ?? ""} onSave={(v) => patch({ description: v })} placeholder="What needs doing, links, context…" />
         </div></div>
 
         <div className="section-label">Linked intent</div>
