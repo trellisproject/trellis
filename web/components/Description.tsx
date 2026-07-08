@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Mermaid } from "./Mermaid";
 
 // Flip the `[ ]` <-> `[x]` on the given 0-based source line (for a clicked checkbox).
 function toggleTaskLine(src: string, i: number): string {
@@ -18,6 +19,12 @@ export function Markdown({ source, onToggle }: { source: string; onToggle?: (lin
         remarkPlugins={[remarkGfm]}
         components={{
           a: ({ node, ...props }) => <a {...props} target="_blank" rel="noreferrer" />,
+          pre: ({ children }) => {
+            const child = Array.isArray(children) ? children[0] : children;
+            const props = (child as { props?: { className?: string; children?: unknown } })?.props;
+            if (props && /language-mermaid/.test(props.className || "")) return <Mermaid chart={String(props.children).trim()} />;
+            return <pre>{children}</pre>;
+          },
           input: ({ node, ...props }) => {
             if (props.type !== "checkbox") return <input {...props} />;
             const line = (node as { position?: { start?: { line?: number } } })?.position?.start?.line;
