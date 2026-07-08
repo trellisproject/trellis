@@ -25,6 +25,10 @@ export default function Settings({ params }: { params: Promise<{ pid: string }> 
   const [copied, setCopied] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [inviteName, setInviteName] = useState("");
+  const [inviteKind, setInviteKind] = useState<"human" | "agent">("human");
+  const [inviteRole, setInviteRole] = useState<"member" | "operator">("member");
+  const [newToken, setNewToken] = useState<{ name: string; token: string } | null>(null);
 
   async function load() {
     const d = await api.get<ProjectView>(`/projects/${pid}`);
@@ -37,6 +41,15 @@ export default function Settings({ params }: { params: Promise<{ pid: string }> 
     setErr("");
     try { await api.patch(`/projects/${pid}/members/${principalId}`, { role }); await load(); }
     catch (e) { setErr(e instanceof Error ? e.message : "Failed to change role"); }
+  }
+  async function invite() {
+    if (!inviteName.trim()) return;
+    setErr(""); setNewToken(null);
+    try {
+      const r = await api.post<{ token: string; principal: { displayName: string } }>(`/projects/${pid}/tokens`, { displayName: inviteName.trim(), kind: inviteKind, role: inviteRole });
+      setNewToken({ name: r.principal.displayName, token: r.token });
+      setInviteName(""); await load();
+    } catch (e) { setErr(e instanceof Error ? e.message : "Failed to mint token"); }
   }
 
   async function rotate() {
@@ -92,6 +105,26 @@ export default function Settings({ params }: { params: Promise<{ pid: string }> 
 
             {isOperator ? (
               <>
+                <div className="section-label">Invite a teammate or provision an agent</div>
+                <div className="card"><div className="row">
+                  <p className="mutedtext" style={{ marginTop: 0, fontSize: 13 }}>Mint a token for a person or agent. It&apos;s shown once — copy it and hand it over. A human pastes it at the Connect screen (the web URL); for the CLI it&apos;s <code className="mono">$TRELLIS_TOKEN</code>.</p>
+                  <div className="flex" style={{ flexWrap: "wrap", gap: 8, alignItems: "flex-end" }}>
+                    <div className="stack" style={{ gap: 4, flex: 1, minWidth: 160 }}>
+                      <label style={{ margin: 0 }}>Name</label>
+                      <input className="input" value={inviteName} onChange={(e) => setInviteName(e.target.value)} placeholder="Jane Dev" />
+                    </div>
+                    <select className="mini-select" value={inviteKind} onChange={(e) => setInviteKind(e.target.value as "human" | "agent")}><option value="human">human</option><option value="agent">agent</option></select>
+                    <select className="mini-select" value={inviteRole} onChange={(e) => setInviteRole(e.target.value as "member" | "operator")}><option value="member">member</option><option value="operator">operator</option></select>
+                    <button className="btn primary" onClick={invite} disabled={!inviteName.trim()}>Mint token</button>
+                  </div>
+                  {newToken && (
+                    <div style={{ marginTop: 12 }}>
+                      <div className="between" style={{ marginBottom: 6 }}><span className="mutedtext" style={{ fontSize: 13 }}>Token for <strong>{newToken.name}</strong> — copy now, it won&apos;t be shown again:</span><button className="btn ghost" onClick={() => copy("token", newToken.token)}>{copied === "token" ? "Copied" : "Copy"}</button></div>
+                      <code className="mono" style={{ background: "var(--bg)", border: "1px solid var(--border)", padding: "9px 12px", borderRadius: 8, display: "block", overflowX: "auto" }}>{newToken.token}</code>
+                    </div>
+                  )}
+                </div></div>
+
                 <div className="section-label">Join code — agents self-onboard as members</div>
                 <div className="card"><div className="row">
                   <p className="mutedtext" style={{ marginTop: 0, fontSize: 13 }}>

@@ -1,7 +1,7 @@
 {
   "name": "@trellisproject/cli",
   "version": "0.1.0",
-  "description": "Trellis CLI — report reality (facts, measurements) to a Trellis project",
+  "description": "Trellis CLI — drive intent, work, and reconciliation from the terminal (specs, assertions, facts, drifts, efforts, tasks, delegation)",
   "type": "module",
   "bin": { "trellis": "./trellis.mjs" },
   "files": ["trellis.mjs"],
