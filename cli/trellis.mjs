@@ -401,6 +401,63 @@ async function cmdEffort(cfg, positional, flags) {
   console.log(`created effort ${r.effort.id}  ${r.effort.title}`);
 }
 
+// The Map — hierarchical, spec-anchored flow diagrams (agent-authorable).
+async function cmdMap(cfg, positional, flags) {
+  const token = await resolveToken(cfg, { name: flags.name });
+  const P = cfg.project;
+  const sub = positional[1];
+  if (!sub || sub === "list") {
+    const { diagrams } = await api(cfg, "GET", `/projects/${P}/diagrams`, null, token);
+    if (!diagrams.length) return console.log("no maps");
+    for (const d of diagrams) console.log(`  ${d.id}  ${d.key}${d.isRoot ? "  (root)" : ""}  [${d.status}]  ${d.title}  ${d.nodeCount} nodes`);
+    return;
+  }
+  if (sub === "new") {
+    const title = flags.title || positional.slice(2).join(" ");
+    if (!title) fail('usage: trellis map new "<title>" [--parent <nodeId>] [--dir TD|LR]');
+    const body = { title };
+    if (flags.parent) body.parent_node_id = flags.parent;
+    if (flags.dir) body.direction = flags.dir;
+    const { diagram } = await api(cfg, "POST", `/projects/${P}/diagrams`, body, token);
+    console.log(`created ${diagram.id}  key=${diagram.key}`);
+    return;
+  }
+  if (sub === "show") {
+    const key = positional[2];
+    if (!key) fail("usage: trellis map show <key>");
+    const d = await api(cfg, "GET", `/projects/${P}/diagrams/${key}`, null, token);
+    console.log(`# ${d.diagram.title}  (key=${d.diagram.key}, id=${d.diagram.id}, ${d.diagram.direction})`);
+    console.log("nodes:");
+    for (const n of d.nodes) console.log(`  ${n.key}  <${n.kind}>  [${n.status}]  ${n.label}${n.childDiagramKey ? `  ⤵${n.childDiagramKey}` : ""}${n.assertionHumanId ? `  ~${n.assertionHumanId}` : ""}${n.effortTitle ? `  ~effort:${n.effortTitle}` : ""}`);
+    console.log("edges:");
+    for (const e of d.edges) console.log(`  ${e.fromKey} -${e.label ? `[${e.label}]` : ""}-> ${e.toKey}`);
+    return;
+  }
+  if (sub === "node") {
+    const did = positional[2];
+    const label = positional[3] || flags.label;
+    if (!did || !label) fail('usage: trellis map node <diagramId> "<label>" [--kind step|decision|trigger|terminal|subflow --effort <id> --assert <humanId> --key <k>]');
+    const body = { label };
+    if (flags.kind) body.kind = flags.kind;
+    if (flags.effort) body.effort_id = flags.effort;
+    if (flags.assert) body.assertion = flags.assert;
+    if (flags.key) body.key = flags.key;
+    const { node } = await api(cfg, "POST", `/projects/${P}/diagrams/${did}/nodes`, body, token);
+    console.log(`node ${node.id}  key=${node.key}`);
+    return;
+  }
+  if (sub === "edge") {
+    const [, , did, from, to] = positional;
+    if (!did || !from || !to) fail("usage: trellis map edge <diagramId> <fromKey> <toKey> [--label <trigger>]");
+    const body = { from, to };
+    if (typeof flags.label === "string") body.label = flags.label;
+    await api(cfg, "POST", `/projects/${P}/diagrams/${did}/edges`, body, token);
+    console.log("edge added");
+    return;
+  }
+  fail("usage: trellis map [list | new | show <key> | node <diagramId> <label> | edge <diagramId> <from> <to>]");
+}
+
 async function cmdEfforts(cfg) {
   const token = await resolveToken(cfg, { allowJoin: true });
   const { efforts } = await api(cfg, "GET", `/projects/${cfg.project}/efforts`, null, token);
@@ -477,6 +534,7 @@ async function main() {
     case "show": return cmdShow(cfg, positional, flags);
     case "effort": return cmdEffort(cfg, positional, flags);
     case "efforts": return cmdEfforts(cfg);
+    case "map": return cmdMap(cfg, positional, flags);
     case "task": return cmdTask(cfg, positional, flags);
     case "tasks": return cmdTasks(cfg, flags);
     case "members": return cmdMembers(cfg);
