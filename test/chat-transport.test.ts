@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { app } from "../src/app.js";
 import { db } from "../src/db/index.js";
 import { requests } from "../src/db/schema.js";
-import { buildChatCapture, extractWorkspaceId, __resetBotForTests } from "../src/lib/chat-bot.js";
+import { buildChatCapture, extractWorkspaceId, stripLeadingMentions, __resetBotForTests } from "../src/lib/chat-bot.js";
 import { captureFromChat, createChatInstall } from "../src/lib/chat.js";
 import { resetDb, makeProject } from "./helpers/db.js";
 
@@ -27,6 +27,7 @@ describe("chat transport — event mapping (buildChatCapture)", () => {
     expect(cap).toEqual({
       provider: "slack",
       workspaceId: "TWORK",
+      channelId: "C123",
       title: "@trellis can the export include the NAIC code?",
       ask: "@trellis can the export include the NAIC code?",
       asker: "slack:U024 (Dana)",
@@ -63,6 +64,24 @@ describe("chat transport — event mapping (buildChatCapture)", () => {
     expect(extractWorkspaceId("slack", { team: { id: "T2" } })).toBe("T2");
     expect(extractWorkspaceId("gchat", { space: { name: "spaces/Z" } })).toBe("spaces/Z");
     expect(extractWorkspaceId("slack", {})).toBeNull();
+  });
+
+  it("does not duplicate the ts in ref when the thread id already ends with the message id", () => {
+    const cap = buildChatCapture({
+      threadId: "slack:C1:1783614252.680839", // top-level message: thread == message ts
+      messageId: "1783614252.680839",
+      text: "add dark mode",
+      author: { userId: "U1" },
+      raw: { team_id: "T1" },
+    });
+    expect(cap?.ref).toBe("slack:C1:1783614252.680839"); // no "#…" duplicate
+  });
+
+  it("strips a leading bot mention from the ask", () => {
+    expect(stripLeadingMentions("@U0BG5UB4ELV test where we go")).toBe("test where we go");
+    expect(stripLeadingMentions("@bot @other please add export")).toBe("please add export");
+    expect(stripLeadingMentions("no mention here")).toBe("no mention here");
+    expect(stripLeadingMentions("@onlyamention")).toBe("@onlyamention"); // don't empty it
   });
 });
 

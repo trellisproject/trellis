@@ -13,7 +13,6 @@
 import { Chat } from "chat";
 import { createSlackAdapter } from "@chat-adapter/slack";
 import { createGoogleChatAdapter } from "@chat-adapter/gchat";
-import { createPostgresState } from "@chat-adapter/state-pg";
 import { createMemoryState } from "@chat-adapter/state-memory";
 import { captureFromChat, type ChatProvider } from "./chat.js";
 
@@ -30,6 +29,15 @@ export function extractWorkspaceId(provider: ChatProvider, raw: unknown): string
   return r.space?.name ?? r.space ?? r.spaceName ?? null;
 }
 
+// Strip a leading run of @-mention tokens — e.g. the bot mention that triggers
+// onNewMention ("@trellis add dark mode" → "add dark mode") — so the captured
+// ask reads naturally. Only applied on the mention path. Falls back to the
+// original text if stripping would empty it.
+export function stripLeadingMentions(text: string): string {
+  const stripped = text.replace(/^(?:\s*@\S+)+\s*/, "").trim();
+  return stripped || text.trim();
+}
+
 // Pure mapping from a normalized chat message to capture arguments, or null when
 // the event can't or shouldn't be captured (non-chat thread, unknown workspace,
 // empty text). Kept free of SDK types so it is unit-testable in isolation.
@@ -39,16 +47,20 @@ export function buildChatCapture(args: {
   text: string;
   author: { userId?: string; fullName?: string };
   raw: unknown;
-}): { provider: ChatProvider; workspaceId: string; title: string; ask: string; asker: string; ref: string } | null {
-  const provider = args.threadId.split(":")[0];
+}): { provider: ChatProvider; workspaceId: string; channelId: string | null; title: string; ask: string; asker: string; ref: string } | null {
+  const parts = args.threadId.split(":");
+  const provider = parts[0];
   if (provider !== "slack" && provider !== "gchat") return null;
+  const channelId = parts[1] ?? null;
   const workspaceId = extractWorkspaceId(provider, args.raw);
   const ask = (args.text ?? "").trim();
   if (!workspaceId || !ask) return null;
   const who = args.author.userId ?? "unknown";
   const asker = `${provider}:${who}${args.author.fullName ? ` (${args.author.fullName})` : ""}`;
-  const ref = `${args.threadId}#${args.messageId}`;
-  return { provider, workspaceId, title: ask.slice(0, 80), ask, asker, ref };
+  // For a top-level message the thread id already ends with the message id, so
+  // don't duplicate it; for a reply the two differ and we append.
+  const ref = args.threadId.endsWith(`:${args.messageId}`) ? args.threadId : `${args.threadId}#${args.messageId}`;
+  return { provider, workspaceId, channelId, title: ask.slice(0, 80), ask, asker, ref };
 }
 
 async function captureFromMessage(message: {
@@ -65,8 +77,13 @@ async function captureFromMessage(message: {
     author: { userId: message.author?.userId, fullName: message.author?.fullName },
     raw: message.raw,
   });
-  if (!cap) return;
-  await captureFromChat(cap);
+  if (!cap) {
+    console.log("[chat] ignored (no workspace or empty text)", { thread: message.threadId });
+    return;
+  }
+  const r = await captureFromChat(cap);
+  if (r.ok) console.log("[chat] captured", { provider: cap.provider, channelId: cap.channelId, requestId: r.value.requestId });
+  else console.log("[chat] not captured", { provider: cap.provider, channelId: cap.channelId, code: r.code });
 }
 
 function configuredAdapters(): Record<string, unknown> {
@@ -82,8 +99,9 @@ function configuredAdapters(): Record<string, unknown> {
   return adapters;
 }
 
+export type WebhookOpts = { waitUntil?: (task: Promise<unknown>) => void };
 type BotLike = {
-  webhooks: Record<string, (request: Request) => Promise<Response>>;
+  webhooks: Record<string, (request: Request, options?: WebhookOpts) => Promise<Response>>;
   onNewMention: (h: (thread: unknown, message: any) => Promise<void>) => void;
   onReaction: (emojis: string[], h: (event: any) => Promise<void>) => void;
 };
@@ -98,19 +116,28 @@ export function getBot(): BotLike | null {
     botMemo = null;
     return null;
   }
-  const state = process.env.DATABASE_URL
-    ? createPostgresState({ url: process.env.DATABASE_URL })
-    : createMemoryState();
+  // In-memory state: the bot only needs state for dedupe/subscriptions, and
+  // capture is stateless. Avoids a second Postgres connection in the hot path.
+  // (state-pg can return once its Neon connectivity is verified.)
+  const state = createMemoryState();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const bot = new Chat({ userName: process.env.CHAT_BOT_USERNAME ?? "trellis", adapters: adapters as any, state }) as unknown as BotLike;
 
   const captureEmoji = process.env.CHAT_CAPTURE_EMOJI ?? "inbox_tray";
   bot.onNewMention(async (_thread, message) => {
-    await captureFromMessage(message);
+    // Strip the bot mention that triggered this so the ask reads naturally.
+    await captureFromMessage({
+      threadId: message.threadId,
+      id: message.id,
+      text: stripLeadingMentions(message.text ?? ""),
+      author: message.author,
+      raw: message.raw,
+    });
   });
   bot.onReaction([captureEmoji], async (event) => {
     if (!event.added || !event.message) return;
-    await captureFromMessage(event.message);
+    const m = event.message;
+    await captureFromMessage({ threadId: m.threadId, id: m.id, text: m.text, author: m.author, raw: m.raw });
   });
 
   botMemo = bot;

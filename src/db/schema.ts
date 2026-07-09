@@ -9,6 +9,7 @@ import {
   date,
   doublePrecision,
   uniqueIndex,
+  unique,
   index,
 } from "drizzle-orm/pg-core";
 
@@ -462,12 +463,20 @@ export const chatInstalls = pgTable(
       .notNull(),
     provider: text("provider").$type<"slack" | "gchat">().notNull(),
     workspaceId: text("workspace_id").notNull(), // Slack team id / Google Chat space name
+    // A specific channel this route captures for. NULL = the workspace default
+    // (applies to any channel with no specific route). A channel-specific route
+    // wins over the default (TRL-API-019).
+    channelId: text("channel_id"),
     capturePrincipalId: text("capture_principal_id")
       .references(() => principals.id)
       .notNull(),
     createdAt: createdAt(),
   },
-  (t) => [uniqueIndex("chat_install_provider_workspace").on(t.provider, t.workspaceId)],
+  (t) => [
+    // One route per (workspace, channel); NULLS NOT DISTINCT so there is at most
+    // one workspace-default row (channel_id NULL) per workspace.
+    unique("chat_install_provider_workspace_channel").on(t.provider, t.workspaceId, t.channelId).nullsNotDistinct(),
+  ],
 );
 
 // A flow diagram — one view in the hierarchical system map. `parentNodeId`

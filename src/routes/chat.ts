@@ -26,7 +26,23 @@ chatRoutes.post("/integrations/chat/:provider", async (c) => {
   if (!bot || !handler) {
     return c.json({ error: `Chat provider "${provider}" is not configured`, code: "CHAT_NOT_CONFIGURED" }, 503);
   }
-  return handler(c.req.raw);
+  // The SDK runs event handlers as background work and hands them to waitUntil
+  // so the webhook can respond fast. On serverless the function is frozen once
+  // the response returns, which would kill an in-flight capture — so we collect
+  // those tasks and await them before responding, trading a little latency for
+  // guaranteed completion. (A platform waitUntil could replace this later.)
+  const tasks: Promise<unknown>[] = [];
+  try {
+    const res = await handler(c.req.raw, { waitUntil: (t) => tasks.push(Promise.resolve(t)) });
+    for (const r of await Promise.allSettled(tasks)) {
+      if (r.status === "rejected") console.error("[chat] capture task rejected", r.reason);
+    }
+    return res;
+  } catch (e) {
+    console.error("[chat] handler threw", e);
+    // Ack anyway so Slack doesn't retry-storm a deterministic failure.
+    return c.json({ ok: false, code: "CHAT_HANDLER_ERROR" }, 200);
+  }
 });
 
 // POST /projects/:pid/chat-installs — an operator installs a chat integration,
@@ -36,7 +52,12 @@ chatRoutes.post("/projects/:pid/chat-installs", async (c) => {
   const op = await requireOperator(c);
   if (op instanceof Response) return op;
   const b = z
-    .object({ provider: z.enum(["slack", "gchat"]), workspaceId: z.string().min(1), displayName: z.string().optional() })
+    .object({
+      provider: z.enum(["slack", "gchat"]),
+      workspaceId: z.string().min(1),
+      channelId: z.string().min(1).nullable().optional(),
+      displayName: z.string().optional(),
+    })
     .safeParse(await c.req.json().catch(() => null));
   if (!b.success) return c.json({ error: "Invalid body", code: "INVALID_INPUT", issues: b.error.issues }, 422);
   const r = await createChatInstall(c.req.param("pid"), b.data);
