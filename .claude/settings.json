@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && { set -a; [ -f .env ] && . ./.env; set +a; if [ -n \"${TRELLIS_TOKEN:-}\" ] || [ -f .trellis/token.json ]; then echo '--- Trellis worklist (unverified intent + drift) ---'; node cli/trellis.mjs worklist 2>/dev/null; fi; } || true"
+          }
+        ]
+      }
+    ]
+  }
+}
