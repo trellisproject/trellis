@@ -4,9 +4,13 @@ import { projects, principals, memberships, delegations, agentTokens } from "../
 import { hashToken } from "../../src/lib/tokens.js";
 
 // Mint a token for a principal and return an Authorization header for it.
-export async function authFor(projectId: string, principalId: string): Promise<Record<string, string>> {
-  const raw = `trk_test_${principalId}`;
-  await db.insert(agentTokens).values({ projectId, principalId, tokenHash: hashToken(raw) });
+export async function authFor(
+  projectId: string,
+  principalId: string,
+  scope: "full" | "capture" = "full",
+): Promise<Record<string, string>> {
+  const raw = `trk_test_${principalId}_${scope}`;
+  await db.insert(agentTokens).values({ projectId, principalId, tokenHash: hashToken(raw), scope: scope === "capture" ? "capture" : null });
   return { Authorization: `Bearer ${raw}` };
 }
 

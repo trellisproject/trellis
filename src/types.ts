@@ -5,5 +5,6 @@ export type AppEnv = {
     principalId?: string;
     principalKind?: "human" | "agent";
     tokenProjectId?: string;
+    tokenScope?: "full" | "capture";
   };
 };

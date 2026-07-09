@@ -11,12 +11,29 @@ type Result<T> = { ok: true; value: T } | { ok: false; code: string; error: stri
 
 export async function createRequest(
   projectId: string,
-  input: { title: string; body?: string; requester: string; source?: string | null; priority?: "now" | "normal" | "later" },
+  input: {
+    title: string;
+    body?: string;
+    requester: string;
+    source?: string | null;
+    sourceRef?: string | null;
+    capturedBy?: string | null;
+    priority?: "now" | "normal" | "later";
+  },
 ): Promise<typeof requests.$inferSelect> {
   return (
     await db
       .insert(requests)
-      .values({ projectId, title: input.title, body: input.body ?? "", requester: input.requester, source: input.source ?? null, priority: input.priority ?? "normal" })
+      .values({
+        projectId,
+        title: input.title,
+        body: input.body ?? "",
+        requester: input.requester,
+        source: input.source ?? null,
+        sourceRef: input.sourceRef ?? null,
+        capturedBy: input.capturedBy ?? null,
+        priority: input.priority ?? "normal",
+      })
       .returning()
   )[0]!;
 }
