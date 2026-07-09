@@ -91,3 +91,47 @@ describe("chat installs (TRL-API-015) — mapping workspace → project + captur
     expect(res.status).toBe(403);
   });
 });
+
+describe("chat installs — per-channel routing (TRL-API-019)", () => {
+  it("routes different channels to different projects; a channel route wins over the default", async () => {
+    const projA = projectId; // default target
+    const { projectId: projB } = await makeProject("proj-b");
+    await createChatInstall(projA, { provider: "slack", workspaceId: "T1" }); // workspace default → A
+    await createChatInstall(projB, { provider: "slack", workspaceId: "T1", channelId: "C_FEATURES" }); // channel → B
+
+    const def = await resolveInstall("slack", "T1", "C_OTHER");
+    expect(def?.projectId).toBe(projA); // unmatched channel falls back to default
+
+    const routed = await resolveInstall("slack", "T1", "C_FEATURES");
+    expect(routed?.projectId).toBe(projB); // channel-specific wins
+  });
+
+  it("captureFromChat lands a request in the channel's project", async () => {
+    const { projectId: projB } = await makeProject("proj-b");
+    await createChatInstall(projB, { provider: "slack", workspaceId: "T1", channelId: "C_FEATURES" });
+    const r = await captureFromChat({
+      provider: "slack",
+      workspaceId: "T1",
+      channelId: "C_FEATURES",
+      title: "x",
+      ask: "add bulk export",
+      asker: "slack:U1",
+      ref: "slack:C_FEATURES:t#m",
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.projectId).toBe(projB);
+  });
+
+  it("drops a capture when no channel route and no default exist", async () => {
+    await createChatInstall(projectId, { provider: "slack", workspaceId: "T1", channelId: "C_ONLY" });
+    const r = await captureFromChat({ provider: "slack", workspaceId: "T1", channelId: "C_UNMAPPED", title: "x", ask: "a", asker: "u", ref: "r" });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe("NO_INSTALL");
+  });
+
+  it("same channel can't be installed twice", async () => {
+    await createChatInstall(projectId, { provider: "slack", workspaceId: "T1", channelId: "C1" });
+    const dup = await createChatInstall(projectId, { provider: "slack", workspaceId: "T1", channelId: "C1" });
+    expect(dup.ok).toBe(false);
+  });
+});
