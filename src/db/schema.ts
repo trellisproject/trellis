@@ -448,6 +448,28 @@ export const requestAssertions = pgTable("request_assertions", {
     .notNull(),
 });
 
+// A chat integration installed into a project (TRL-API-015). Maps an external
+// chat workspace/space to the project that receives its requests and to the
+// capture-scoped principal that authors them (so captured_by identifies which
+// install a request came from). An inbound chat event resolves to exactly one
+// install by (provider, workspaceId).
+export const chatInstalls = pgTable(
+  "chat_installs",
+  {
+    id: id(),
+    projectId: text("project_id")
+      .references(() => projects.id)
+      .notNull(),
+    provider: text("provider").$type<"slack" | "gchat">().notNull(),
+    workspaceId: text("workspace_id").notNull(), // Slack team id / Google Chat space name
+    capturePrincipalId: text("capture_principal_id")
+      .references(() => principals.id)
+      .notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("chat_install_provider_workspace").on(t.provider, t.workspaceId)],
+);
+
 // A flow diagram — one view in the hierarchical system map. `parentNodeId`
 // links it as the drill-down target of a node in the parent diagram; null = a
 // root map. `key` is a project-unique slug for routing.
