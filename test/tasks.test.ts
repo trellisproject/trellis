@@ -45,6 +45,13 @@ describe("tasks", () => {
     if (!r.ok) expect(r.code).toBe("UNKNOWN_ASSERTION");
   });
 
+  it("rejects linking a proposed assertion (TRL-CORE-006)", async () => {
+    await ingestSpec(projectId, "core", `---\nspec: T-X\ntitle: T\n---\n### T-X-002: t\nstatus: proposed\n\nbody\n`, "cp");
+    const r = await createTask(projectId, { title: "x", assertions: ["T-X-002"] });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe("ASSERTION_NOT_BUILDABLE");
+  });
+
   it("claim sets owner and moves open -> claimed", async () => {
     const t = await mkTask();
     const r = await claimTask(projectId, t.id, operatorId);

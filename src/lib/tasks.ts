@@ -40,6 +40,12 @@ export async function createTask(
     const map = new Map(rows.map((r) => [r.humanId, r.id]));
     const missing = input.assertions.filter((h) => !map.has(h));
     if (missing.length) return { ok: false, code: "UNKNOWN_ASSERTION", error: `Unknown: ${missing.join(", ")}` };
+    // TRL-CORE-006: agents build only against agreed intent — a `proposed` (not
+    // yet reviewed) or `retired` assertion is not buildable, so it can't anchor a task.
+    const notBuildable = rows.filter((r) => r.status === "proposed" || r.status === "retired");
+    if (notBuildable.length) {
+      return { ok: false, code: "ASSERTION_NOT_BUILDABLE", error: `Not buildable (${notBuildable.map((r) => `${r.humanId}:${r.status}`).join(", ")})` };
+    }
     assertionIds = input.assertions.map((h) => map.get(h)!);
   }
   if (input.driftId) {
