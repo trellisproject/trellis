@@ -225,14 +225,23 @@ export async function getEffortDetail(projectId: string, effortId: string) {
 export async function listEfforts(projectId: string) {
   const rows = await db.select().from(efforts).where(eq(efforts.projectId, projectId)).orderBy(asc(efforts.order));
   const [progress, byEffort, owners] = await Promise.all([progressFor(projectId), assertionsByEffort(projectId), ownerNames(rows.map((e) => e.ownerId))]);
+  const taskRows = await db.select({ id: tasks.id, title: tasks.title, status: tasks.status, priority: tasks.priority, effortId: tasks.effortId }).from(tasks).where(eq(tasks.projectId, projectId));
+  const tasksByEffort = new Map<string, { id: string; title: string; status: string; priority: string }[]>();
+  for (const t of taskRows) { if (!t.effortId) continue; const arr = tasksByEffort.get(t.effortId) ?? []; arr.push({ id: t.id, title: t.title, status: t.status, priority: t.priority }); tasksByEffort.set(t.effortId, arr); }
   return rows
-    .map((e) => ({
-      ...e,
-      ownerName: e.ownerId ? owners.get(e.ownerId) ?? null : null,
-      ...deadlineInfo(e.targetDate, e.status),
-      progress: progress.get(e.id) ?? { verified: 0, total: 0 },
-      assertions: byEffort.get(e.id) ?? [],
-    }))
+    .map((e) => {
+      const et = tasksByEffort.get(e.id) ?? [];
+      return {
+        ...e,
+        ownerName: e.ownerId ? owners.get(e.ownerId) ?? null : null,
+        ...deadlineInfo(e.targetDate, e.status),
+        progress: progress.get(e.id) ?? { verified: 0, total: 0 },
+        assertions: byEffort.get(e.id) ?? [],
+        tasks: et,
+        taskTotal: et.length,
+        taskDone: et.filter((t) => t.status === "done").length,
+      };
+    })
     // A due-soon effort floats up as if active — the deadline pulls it into focus.
     .sort((a, b) => (a.dueSoon === b.dueSoon ? STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || a.order - b.order : a.dueSoon ? -1 : 1));
 }

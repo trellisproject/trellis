@@ -225,8 +225,14 @@ function EffortCard({ pid, e, members, onStatus, onOwner, onAdd, onDeadline, dra
           <div className="mutedtext" style={{ fontSize: 13 }}>Open-ended · {e.assertions.length} assertion{e.assertions.length === 1 ? "" : "s"} · ship increments as they come</div>
         ) : (
           <>
-            <div className="mutedtext" style={{ fontSize: 13, marginBottom: 6 }}>{e.progress.verified} of {e.progress.total} verified</div>
-            <div className="progress"><span style={{ width: `${pct}%` }} /></div>
+            {e.assertions.length > 0 && (
+              <>
+                <div className="mutedtext" style={{ fontSize: 13, marginBottom: 6 }}>{e.progress.verified} of {e.progress.total} verified</div>
+                <div className="progress"><span style={{ width: `${pct}%` }} /></div>
+              </>
+            )}
+            {(e.taskTotal ?? 0) > 0 && <div className="mutedtext" style={{ fontSize: 13, marginTop: e.assertions.length > 0 ? 8 : 0 }}>{e.taskDone} of {e.taskTotal} task{e.taskTotal === 1 ? "" : "s"} done</div>}
+            {e.assertions.length === 0 && (e.taskTotal ?? 0) === 0 && <div className="mutedtext" style={{ fontSize: 13 }}>No assertions or tasks yet</div>}
           </>
         )}
       </div>
@@ -245,6 +251,14 @@ function EffortCard({ pid, e, members, onStatus, onOwner, onAdd, onDeadline, dra
             <Badge status={a.status} />
             <span className="mutedtext">→</span>
           </div>
+        </Link>
+      ))}
+
+      {/* Tasks */}
+      {(e.tasks ?? []).map((t) => (
+        <Link key={t.id} href={`/p/${pid}/t/${t.id}`} className="row between" style={{ display: "flex" }}>
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textDecoration: t.status === "done" ? "line-through" : "none", opacity: t.status === "done" ? 0.6 : 1 }}>{t.title}</span>
+          <span className="pill" style={{ textTransform: "capitalize" }}>{t.status.replace("_", " ")}</span>
         </Link>
       ))}
 

@@ -70,6 +70,9 @@ export type Effort = {
   dueSoon: boolean;
   progress: { verified: number; total: number };
   assertions: EffortAssertion[];
+  tasks?: { id: string; title: string; status: string; priority: string }[];
+  taskTotal?: number;
+  taskDone?: number;
 };
 export type Member = { principalId: string; name: string; kind: "human" | "agent"; role: string };
 export type NodeStatus = "verified" | "drifted" | "progress" | "none";
