@@ -3,7 +3,8 @@ import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { requests } from "../db/schema.js";
-import { createRequest, decideRequest, getRequest, linkRequestAssertions, listRequests } from "../lib/requests.js";
+import { createRequest, decideRequest, deliverPendingReceipts, getRequest, linkRequestAssertions, listRequests } from "../lib/requests.js";
+import { postChatMessage } from "../lib/chat-bot.js";
 import { requireMember } from "../middleware/auth.js";
 import type { AppEnv } from "../types.js";
 
@@ -107,6 +108,16 @@ requestRoutes.post("/projects/:pid/requests/:rid/decide", async (c) => {
   const r = await decideRequest(c.req.param("pid"), c.req.param("rid"), { actorId: m.principalId, choice: b.data.choice, rationale: b.data.rationale, delegatedById: b.data.delegated_by ?? null });
   if (!r.ok) return c.json({ error: r.error, code: r.code }, st(r.code));
   return c.json(r.value);
+});
+
+// POST /projects/:pid/requests/deliver-receipts — deliver receipts for shipped
+// chat-sourced requests (TRL-CORE-045). Idempotent sweep, run by an agent or
+// checker; safe to call repeatedly.
+requestRoutes.post("/projects/:pid/requests/deliver-receipts", async (c) => {
+  const m = await requireMember(c);
+  if (m instanceof Response) return m;
+  const r = await deliverPendingReceipts(c.req.param("pid"), postChatMessage);
+  return c.json(r);
 });
 
 // POST /projects/:pid/requests/:rid/assertions — link derived intent (TRL-CORE-032).

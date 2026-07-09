@@ -14,7 +14,7 @@ import { Chat } from "chat";
 import { createSlackAdapter } from "@chat-adapter/slack";
 import { createGoogleChatAdapter } from "@chat-adapter/gchat";
 import { createMemoryState } from "@chat-adapter/state-memory";
-import { captureFromChat, type ChatProvider } from "./chat.js";
+import { captureFromChat, resolveInstall, type ChatProvider } from "./chat.js";
 
 // The workspace id is not a normalized SDK field — it lives in the platform raw
 // payload — so extraction is platform-specific and best-effort. These are the
@@ -105,10 +105,23 @@ export type WebhookOpts = { waitUntil?: (task: Promise<unknown>) => void };
 type BotLike = {
   webhooks: Record<string, (request: Request, options?: WebhookOpts) => Promise<Response>>;
   onNewMention: (h: (thread: unknown, message: any) => Promise<void>) => void;
+  onNewMessage: (pattern: RegExp, h: (thread: unknown, message: any) => Promise<void>) => void;
   onReaction: (emojis: string[], h: (event: any) => Promise<void>) => void;
 };
 
 let botMemo: BotLike | null | undefined;
+let adapterRefs: Record<string, { postMessage?: (threadId: string, message: string) => Promise<unknown> }> = {};
+
+// Post an outbound message into a thread via the provider's adapter — used to
+// deliver shipped-request receipts (TRL-CORE-045). Returns false when chat is
+// not configured for that provider. The threadId is the request's source_ref.
+export async function postChatMessage(provider: string, threadId: string, text: string): Promise<boolean> {
+  getBot(); // ensure adapters are constructed
+  const adapter = adapterRefs[provider];
+  if (!adapter || typeof adapter.postMessage !== "function") return false;
+  await adapter.postMessage(threadId, text);
+  return true;
+}
 
 // The configured bot, or null when no adapter credentials are present.
 export function getBot(): BotLike | null {
@@ -118,6 +131,7 @@ export function getBot(): BotLike | null {
     botMemo = null;
     return null;
   }
+  adapterRefs = adapters as Record<string, { postMessage?: (threadId: string, message: string) => Promise<unknown> }>;
   // In-memory state: the bot only needs state for dedupe/subscriptions, and
   // capture is stateless. Avoids a second Postgres connection in the hot path.
   // (state-pg can return once its Neon connectivity is verified.)
@@ -135,6 +149,20 @@ export function getBot(): BotLike | null {
       author: message.author,
       raw: message.raw,
     });
+  });
+  // Auto-capture: in a route whose mode is "all", every top-level message is a
+  // request. Mentions are skipped here — the mention handler already captures
+  // them — so a message is never captured twice. Requires the platform to
+  // deliver message events (Slack: the message.channels event subscription).
+  bot.onNewMessage(/.*/, async (_thread, message) => {
+    if (message.isMention) return;
+    const parts = (message.threadId ?? "").split(":");
+    const provider = parts[0];
+    const channelId = parts[1];
+    if ((provider !== "slack" && provider !== "gchat") || !channelId) return;
+    const install = await resolveInstall(provider, null, channelId);
+    if (!install || install.captureMode !== "all") return;
+    await captureFromMessage({ threadId: message.threadId, id: message.id, text: message.text, author: message.author, raw: message.raw });
   });
   bot.onReaction([captureEmoji], async (event) => {
     if (!event.added) return;
@@ -169,4 +197,5 @@ export function getBot(): BotLike | null {
 // Test-only: reset the memoized bot so env changes take effect.
 export function __resetBotForTests(): void {
   botMemo = undefined;
+  adapterRefs = {};
 }

@@ -120,6 +120,20 @@
       "when": 1783611590824,
       "tag": "0016_far_lenny_balinger",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1783619154409,
+      "tag": "0017_lucky_korvac",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1783619326357,
+      "tag": "0018_huge_human_torch",
+      "breakpoints": true
     }
   ]
 }

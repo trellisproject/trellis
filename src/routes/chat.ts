@@ -56,6 +56,7 @@ chatRoutes.post("/projects/:pid/chat-installs", async (c) => {
       provider: z.enum(["slack", "gchat"]),
       workspaceId: z.string().min(1),
       channelId: z.string().min(1).nullable().optional(),
+      captureMode: z.enum(["trigger", "all"]).optional(),
       displayName: z.string().optional(),
     })
     .safeParse(await c.req.json().catch(() => null));
