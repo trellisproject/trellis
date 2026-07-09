@@ -3,6 +3,12 @@
   "version": "0.1.0",
   "description": "Project & specification management for agent-driven development",
   "type": "module",
+  "bin": {
+    "trellis": "cli/trellis.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "tsx watch --env-file=.env src/index.ts",
     "build": "tsup src/index.ts --format esm --target node20 --out-dir dist",
