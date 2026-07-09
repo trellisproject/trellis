@@ -13,6 +13,10 @@ export type IngestReport = {
   created: string[];
   statementsUpdated: string[];
   retired: string[];
+  // Placeholder ids resolved to real ids during this ingest (TRL-CORE-048/049).
+  // The caller writes these back into the git mirror so the placeholder never
+  // reaches a commit.
+  allocated: { placeholder: string; assigned: string }[];
   errors: { line: number; message: string }[];
 };
 
@@ -31,6 +35,7 @@ export async function ingestSpec(
       created: [],
       statementsUpdated: [],
       retired: [],
+      allocated: [],
       errors: parsed.errors,
     };
   }
@@ -50,6 +55,7 @@ export async function ingestSpec(
         created: [],
         statementsUpdated: [],
         retired: [],
+        allocated: [],
         errors: [],
       };
     }
@@ -90,7 +96,39 @@ export async function ingestSpec(
       .where(eq(assertions.specId, specRow.id));
     const byHumanId = new Map(current.map((a) => [a.humanId, a]));
 
-    for (const pa of parsed.assertions) {
+    // TRL-CORE-048/049: resolve placeholder ids to real, sequential ones. The
+    // server is the sole id allocator, so no human picks a number and parallel
+    // drafts cannot collide. Allocation runs inside this transaction, which is
+    // serialized per spec (TRL-API-014), so it is atomic. The next number for a
+    // prefix is max(existing db ids, real ids in this file) + 1, then counting
+    // up for each further placeholder.
+    const allocated: { placeholder: string; assigned: string }[] = [];
+    const nextByPrefix = new Map<string, number>();
+    const maxForPrefix = (prefix: string): number => {
+      const re = new RegExp(`^${prefix}-(\\d{3})$`);
+      let max = 0;
+      for (const a of current) {
+        const m = re.exec(a.humanId);
+        if (m) max = Math.max(max, Number(m[1]));
+      }
+      for (const pa of parsed.assertions) {
+        if (pa.placeholder) continue;
+        const m = re.exec(pa.humanId);
+        if (m) max = Math.max(max, Number(m[1]));
+      }
+      return max;
+    };
+    const resolved = parsed.assertions.map((pa) => {
+      if (!pa.placeholder) return pa;
+      const prefix = pa.humanId.replace(/-NEW(?:-[A-Za-z0-9]+)?$/, "");
+      const n = (nextByPrefix.get(prefix) ?? maxForPrefix(prefix)) + 1;
+      nextByPrefix.set(prefix, n);
+      const assigned = `${prefix}-${String(n).padStart(3, "0")}`;
+      allocated.push({ placeholder: pa.humanId, assigned });
+      return { ...pa, humanId: assigned, placeholder: false };
+    });
+
+    for (const pa of resolved) {
       seenIds.add(pa.humanId);
       const prev = byHumanId.get(pa.humanId);
       if (!prev) {
@@ -159,6 +197,7 @@ export async function ingestSpec(
       created,
       statementsUpdated,
       retired,
+      allocated,
       errors: [],
     };
   });

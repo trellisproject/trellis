@@ -13,6 +13,9 @@ export type ParsedAssertion = {
   statement: string;
   order: number;
   metric: ParsedMetric | null;
+  // True when humanId is a placeholder token (e.g. TRL-CORE-NEW) awaiting
+  // server-side id allocation at ingest (TRL-CORE-048/049), not a real id.
+  placeholder: boolean;
 };
 
 export type ParseResult = {
@@ -31,8 +34,17 @@ const STATUSES: AssertionStatus[] = [
   "retired",
 ];
 
-const ASSERTION_HEADING = /^###\s+([A-Z]+-[A-Z]+-\d{3}):\s+(.+?)\s*$/;
+// An id suffix is either a real 3-digit number or a placeholder: NEW, with an
+// optional label so several unresolved drafts in one file stay distinct
+// (TRL-CORE-NEW, TRL-CORE-NEW-chat). Placeholders are resolved to real ids by
+// the server at ingest.
+const ASSERTION_HEADING = /^###\s+([A-Z]+-[A-Z]+-(?:\d{3}|NEW(?:-[A-Za-z0-9]+)?)):\s+(.+?)\s*$/;
+const PLACEHOLDER_ID = /-NEW(?:-[A-Za-z0-9]+)?$/;
 const OTHER_HEADING = /^#{1,3}\s+/;
+
+export function isPlaceholderId(humanId: string): boolean {
+  return PLACEHOLDER_ID.test(humanId);
+}
 const STATUS_LINE = /^status:\s*(\S+)\s*$/;
 const METRIC_LINE = /^metric:\s*(\S+)\s*(>=|<=|>|<|==)\s*([0-9]+(?:\.[0-9]+)?)\s*(\S+)?\s*$/i;
 const OP_MAP: Record<string, Comparator> = { ">=": "gte", ">": "gt", "<=": "lte", "<": "lt", "==": "eq" };
@@ -83,11 +95,16 @@ export function parseSpec(source: string): ParseResult {
     const lineNo = bodyOffset + i + 1;
     const humanId = heading[1]!;
     const title = heading[2]!;
+    const placeholder = isPlaceholderId(humanId);
 
-    if (seen.has(humanId)) {
-      errors.push({ line: lineNo, message: `Duplicate assertion id ${humanId}` });
+    // Placeholders are not yet real ids, so they are exempt from the duplicate
+    // check — the server assigns each a distinct id at ingest.
+    if (!placeholder) {
+      if (seen.has(humanId)) {
+        errors.push({ line: lineNo, message: `Duplicate assertion id ${humanId}` });
+      }
+      seen.add(humanId);
     }
-    seen.add(humanId);
 
     // status line: next non-empty line must be `status: X`
     let j = i + 1;
@@ -132,7 +149,7 @@ export function parseSpec(source: string): ParseResult {
       errors.push({ line: lineNo, message: `${humanId}: empty statement` });
     }
 
-    assertions.push({ humanId, title, status, statement, order: order++, metric });
+    assertions.push({ humanId, title, status, statement, order: order++, metric, placeholder });
     i = k;
   }
 

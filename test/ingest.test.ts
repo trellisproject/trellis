@@ -86,3 +86,45 @@ describe("ingestSpec", () => {
     expect(rows).toHaveLength(0); // nothing persisted
   });
 });
+
+describe("ingestSpec — placeholder id allocation (TRL-CORE-048/049)", () => {
+  it("allocates the next sequential id for a placeholder and reports the mapping", async () => {
+    await ingestSpec(projectId, "core", spec(A("T-X-001", "agreed", "one")), "c1");
+    const r = await ingestSpec(
+      projectId,
+      "core",
+      spec(A("T-X-001", "agreed", "one") + A("T-X-NEW", "proposed", "two")),
+      "c2",
+    );
+    expect(r.ok).toBe(true);
+    expect(r.allocated).toEqual([{ placeholder: "T-X-NEW", assigned: "T-X-002" }]);
+    expect(r.created).toEqual(["T-X-002"]);
+    const ids = (await db.select().from(assertions).where(eq(assertions.projectId, projectId))).map((a) => a.humanId);
+    expect(ids.sort()).toEqual(["T-X-001", "T-X-002"]);
+    // the placeholder token itself is never persisted
+    expect(ids).not.toContain("T-X-NEW");
+  });
+
+  it("allocates distinct sequential ids for multiple placeholders in one file", async () => {
+    const src = spec(A("T-X-NEW-a", "proposed", "first") + A("T-X-NEW-b", "proposed", "second"));
+    const r = await ingestSpec(projectId, "core", src, "c1");
+    expect(r.ok).toBe(true);
+    expect(r.allocated).toEqual([
+      { placeholder: "T-X-NEW-a", assigned: "T-X-001" },
+      { placeholder: "T-X-NEW-b", assigned: "T-X-002" },
+    ]);
+    expect(r.created.sort()).toEqual(["T-X-001", "T-X-002"]);
+  });
+
+  it("skips past an explicit real id introduced in the same file (no collision)", async () => {
+    const src = spec(A("T-X-005", "agreed", "explicit") + A("T-X-NEW", "proposed", "draft"));
+    const r = await ingestSpec(projectId, "core", src, "c1");
+    expect(r.allocated).toEqual([{ placeholder: "T-X-NEW", assigned: "T-X-006" }]);
+    expect(r.created.sort()).toEqual(["T-X-005", "T-X-006"]);
+  });
+
+  it("has an empty allocation list when there are no placeholders", async () => {
+    const r = await ingestSpec(projectId, "core", spec(A("T-X-001", "agreed", "one")), "c1");
+    expect(r.allocated).toEqual([]);
+  });
+});
