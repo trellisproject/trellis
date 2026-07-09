@@ -99,6 +99,13 @@
       "when": 1783543519246,
       "tag": "0013_node_spec_anchor",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1783598550264,
+      "tag": "0014_fixed_wallop",
+      "breakpoints": true
     }
   ]
 }

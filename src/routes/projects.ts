@@ -82,6 +82,9 @@ const mintToken = z.object({
   displayName: z.string().min(1),
   kind: z.enum(["human", "agent"]).default("agent"),
   role: z.enum(["operator", "member"]).default("member"),
+  // "capture" mints a chat-integration token restricted to request capture
+  // (TRL-API-015). Defaults to a full-capability token.
+  scope: z.enum(["full", "capture"]).default("full"),
 });
 
 // POST /projects/:pid/tokens — operator provisions a new principal (typically
@@ -94,12 +97,12 @@ projectRoutes.post("/projects/:pid/tokens", async (c) => {
   if (!parsed.success) {
     return c.json({ error: "Invalid body", code: "INVALID_INPUT", issues: parsed.error.issues }, 422);
   }
-  const { displayName, kind, role } = parsed.data;
+  const { displayName, kind, role, scope } = parsed.data;
   const raw = generateToken();
   const principal = await db.transaction(async (tx) => {
     const p = (await tx.insert(principals).values({ kind, displayName }).returning())[0]!;
     await tx.insert(memberships).values({ projectId: pid, principalId: p.id, role });
-    await tx.insert(agentTokens).values({ projectId: pid, principalId: p.id, tokenHash: hashToken(raw) });
+    await tx.insert(agentTokens).values({ projectId: pid, principalId: p.id, tokenHash: hashToken(raw), scope: scope === "capture" ? "capture" : null });
     return p;
   });
   return c.json({ principal, token: raw }, 201);

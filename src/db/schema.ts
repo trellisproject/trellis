@@ -87,6 +87,9 @@ export const agentTokens = pgTable(
       .references(() => principals.id)
       .notNull(),
     tokenHash: text("token_hash").notNull(),
+    // Capability scope (TRL-API-015). null/"full" = ordinary principal; "capture"
+    // = a chat-integration token that may only capture requests, nothing else.
+    scope: text("scope").$type<"full" | "capture">(),
     createdAt: createdAt(),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
   },
@@ -423,8 +426,10 @@ export const requests = pgTable("requests", {
     .notNull(),
   title: text("title").notNull(),
   body: text("body").default("").notNull(),
-  requester: text("requester").notNull(), // who asked — "customer: Acme", a name, etc.
-  source: text("source"), // email | slack | meeting | customer | ...
+  requester: text("requester").notNull(), // the asker — "customer: Acme", a name, etc. (TRL-CORE-043)
+  source: text("source"), // source type: email | slack | gchat | meeting | customer | ...
+  sourceRef: text("source_ref"), // durable reference to the origin (permalink, message id) — TRL-CORE-047
+  capturedBy: text("captured_by").references(() => principals.id), // the authenticated principal that captured, distinct from the asker (TRL-CORE-043)
   status: text("status").$type<"new" | "accepted" | "declined">().notNull().default("new"),
   priority: text("priority").$type<"now" | "normal" | "later">().notNull().default("normal"),
   decisionId: text("decision_id"), // the accept/decline decision

@@ -16,13 +16,57 @@ const ERR: Record<string, number> = {
 };
 const st = (code: string) => (ERR[code] ?? 400) as 400;
 
-// POST /projects/:pid/requests — capture an ask (any member, TRL-CORE-030).
+// POST /projects/:pid/requests — capture an ask. Open to any member and to a
+// capture-scoped chat principal (TRL-CORE-030/046, TRL-API-015). `source` may be
+// a bare type string (legacy) or {type, ref}; the ask itself is `body`, stored
+// verbatim (TRL-CORE-047). The capturing principal is recorded server-side and
+// is distinct from `requester`, the asker (TRL-CORE-043).
 requestRoutes.post("/projects/:pid/requests", async (c) => {
-  const m = await requireMember(c);
+  const m = await requireMember(c, { allowCaptureScope: true });
   if (m instanceof Response) return m;
-  const b = z.object({ title: z.string().min(1), body: z.string().optional(), requester: z.string().min(1), source: z.string().nullable().optional(), priority: z.enum(["now", "normal", "later"]).optional() }).safeParse(await c.req.json().catch(() => null));
+  const b = z
+    .object({
+      title: z.string().min(1),
+      body: z.string().optional(),
+      requester: z.string().min(1),
+      source: z
+        .union([z.string(), z.object({ type: z.string().min(1), ref: z.string().min(1) })])
+        .nullable()
+        .optional(),
+      sourceRef: z.string().nullable().optional(),
+      priority: z.enum(["now", "normal", "later"]).optional(),
+    })
+    .safeParse(await c.req.json().catch(() => null));
   if (!b.success) return c.json({ error: "Invalid body", code: "INVALID_INPUT", issues: b.error.issues }, 422);
-  const req = await createRequest(c.req.param("pid"), b.data);
+
+  let sourceType: string | null = null;
+  let sourceRef: string | null = b.data.sourceRef ?? null;
+  if (typeof b.data.source === "string") sourceType = b.data.source;
+  else if (b.data.source) {
+    sourceType = b.data.source.type;
+    sourceRef = b.data.source.ref;
+  }
+
+  // TRL-API-016: a chat (capture-scoped) principal must supply full provenance —
+  // a source type, a durable reference, and the verbatim ask — since a chat
+  // permalink is the only trace back to the origin. Human/UI captures may omit
+  // a source (they have observability elsewhere).
+  if (c.get("tokenScope") === "capture" && (!sourceType || !sourceRef || !b.data.body?.trim())) {
+    return c.json(
+      { error: "Chat capture requires a source type, a source ref, and the verbatim ask (body)", code: "INCOMPLETE_SOURCE" },
+      422,
+    );
+  }
+
+  const req = await createRequest(c.req.param("pid"), {
+    title: b.data.title,
+    body: b.data.body,
+    requester: b.data.requester,
+    source: sourceType,
+    sourceRef,
+    capturedBy: m.principalId,
+    priority: b.data.priority,
+  });
   return c.json({ request: req }, 201);
 });
 

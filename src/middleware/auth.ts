@@ -14,7 +14,7 @@ export const authenticate: MiddlewareHandler<AppEnv> = async (c, next) => {
     const raw = header.slice(7).trim();
     const row = (
       await db
-        .select({ principalId: agentTokens.principalId, projectId: agentTokens.projectId, kind: principals.kind })
+        .select({ principalId: agentTokens.principalId, projectId: agentTokens.projectId, kind: principals.kind, scope: agentTokens.scope })
         .from(agentTokens)
         .innerJoin(principals, eq(principals.id, agentTokens.principalId))
         .where(and(eq(agentTokens.tokenHash, hashToken(raw)), isNull(agentTokens.revokedAt)))
@@ -23,6 +23,7 @@ export const authenticate: MiddlewareHandler<AppEnv> = async (c, next) => {
     c.set("principalId", row.principalId);
     c.set("principalKind", row.kind);
     c.set("tokenProjectId", row.projectId);
+    c.set("tokenScope", row.scope ?? "full");
   }
   await next();
 };
@@ -31,15 +32,27 @@ export type Member = { principalId: string; role: "operator" | "member" };
 
 // Resolve the caller to a member of an explicit project id. Returns a Response
 // (401/403) to short-circuit, or the member on success (TRL-API-003/010/012).
+export type MemberOpts = {
+  // Set by the one route (request capture) that a capture-scoped chat principal
+  // is permitted to reach. Every other route leaves this false, so a
+  // capture-scoped token is rejected with 403 (TRL-API-015, and thereby
+  // TRL-CORE-044: no decision originates from a chat surface).
+  allowCaptureScope?: boolean;
+};
+
 export async function requireProjectMember(
   c: Context<AppEnv>,
   projectId: string,
+  opts: MemberOpts = {},
 ): Promise<Member | Response> {
   const principalId = c.get("principalId");
   if (!principalId) return c.json({ error: "Authentication required", code: "UNAUTHENTICATED" }, 401);
   const tokenProjectId = c.get("tokenProjectId");
   if (tokenProjectId && tokenProjectId !== projectId) {
     return c.json({ error: "Token not valid for this project", code: "WRONG_PROJECT" }, 403);
+  }
+  if (c.get("tokenScope") === "capture" && !opts.allowCaptureScope) {
+    return c.json({ error: "This token may only capture requests", code: "CAPTURE_SCOPE" }, 403);
   }
   const m = (
     await db
@@ -52,10 +65,10 @@ export async function requireProjectMember(
 }
 
 // Same, using the :pid path param.
-export async function requireMember(c: Context<AppEnv>): Promise<Member | Response> {
+export async function requireMember(c: Context<AppEnv>, opts: MemberOpts = {}): Promise<Member | Response> {
   const pid = c.req.param("pid");
   if (!pid) return c.json({ error: "Missing project id", code: "INVALID_INPUT" }, 400);
-  return requireProjectMember(c, pid);
+  return requireProjectMember(c, pid, opts);
 }
 
 export async function requireOperator(c: Context<AppEnv>): Promise<Member | Response> {
