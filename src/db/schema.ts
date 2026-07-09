@@ -9,7 +9,6 @@ import {
   date,
   doublePrecision,
   uniqueIndex,
-  unique,
   index,
 } from "drizzle-orm/pg-core";
 
@@ -480,9 +479,14 @@ export const chatInstalls = pgTable(
     createdAt: createdAt(),
   },
   (t) => [
-    // One route per (workspace, channel); NULLS NOT DISTINCT so there is at most
-    // one workspace-default row (channel_id NULL) per workspace.
-    unique("chat_install_provider_workspace_channel").on(t.provider, t.workspaceId, t.channelId).nullsNotDistinct(),
+    // A channel maps to at most one project across the whole system (TRL-API-020):
+    // global unique on (provider, channel) for channel-specific routes, so no
+    // project can claim another project's channel. Resolution matches a channel
+    // route by channel alone (reactions carry no workspace id), which is only
+    // sound because of this uniqueness.
+    uniqueIndex("chat_install_channel_global").on(t.provider, t.channelId).where(sql`${t.channelId} is not null`),
+    // At most one workspace-default route (channel_id NULL) per workspace.
+    uniqueIndex("chat_install_workspace_default").on(t.provider, t.workspaceId).where(sql`${t.channelId} is null`),
   ],
 );
 

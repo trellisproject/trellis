@@ -134,6 +134,13 @@
       "when": 1783619326357,
       "tag": "0018_huge_human_torch",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1783625884013,
+      "tag": "0019_material_black_tarantula",
+      "breakpoints": true
     }
   ]
 }

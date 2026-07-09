@@ -7,7 +7,7 @@ import type { AppEnv } from "../types.js";
 
 export const chatRoutes = new Hono<AppEnv>();
 
-const ERR: Record<string, number> = { INSTALL_EXISTS: 409 };
+const ERR: Record<string, number> = { INSTALL_EXISTS: 409, CHANNEL_TAKEN: 409 };
 const st = (code: string) => (ERR[code] ?? 400) as 400;
 
 // POST /integrations/chat/:provider — platform webhook. Authenticated by the

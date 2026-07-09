@@ -135,6 +135,18 @@ describe("chat installs — per-channel routing (TRL-API-019)", () => {
     expect(dup.ok).toBe(false);
   });
 
+  it("a channel cannot be claimed by a second project (global uniqueness, TRL-API-020)", async () => {
+    const { projectId: projB } = await makeProject("proj-b");
+    const a = await createChatInstall(projectId, { provider: "slack", workspaceId: "T1", channelId: "C_SHARED" });
+    expect(a.ok).toBe(true);
+    // different project, even a different workspace id, cannot claim the same channel
+    const b = await createChatInstall(projB, { provider: "slack", workspaceId: "T2", channelId: "C_SHARED" });
+    expect(b.ok).toBe(false);
+    if (!b.ok) expect(b.code).toBe("CHANNEL_TAKEN");
+    // the channel still resolves to the original project
+    expect((await resolveInstall("slack", null, "C_SHARED"))?.projectId).toBe(projectId);
+  });
+
   it("resolves a channel route without a workspace id (Slack reaction path)", async () => {
     const { projectId: projB } = await makeProject("proj-b");
     await createChatInstall(projB, { provider: "slack", workspaceId: "T1", channelId: "C_X" });

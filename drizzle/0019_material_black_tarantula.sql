@@ -1,0 +1,3 @@
+ALTER TABLE "chat_installs" DROP CONSTRAINT "chat_install_provider_workspace_channel";--> statement-breakpoint
+CREATE UNIQUE INDEX "chat_install_channel_global" ON "chat_installs" USING btree ("provider","channel_id") WHERE "chat_installs"."channel_id" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX "chat_install_workspace_default" ON "chat_installs" USING btree ("provider","workspace_id") WHERE "chat_installs"."channel_id" is null;
