@@ -100,7 +100,9 @@ export async function ingestSpec(
           humanId: pa.humanId,
           title: pa.title,
           statement: pa.statement,
-          status: pa.status,
+          // TRL-CORE-005: a source file must never birth a `verified` assertion —
+          // that status requires a supporting fact — so clamp it to `agreed`.
+          status: pa.status === "verified" ? "agreed" : pa.status,
           orderInSpec: pa.order,
           metricKey: pa.metric?.key ?? null,
           metricComparator: pa.metric?.comparator ?? null,

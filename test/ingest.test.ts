@@ -28,6 +28,16 @@ describe("ingestSpec", () => {
     expect(rows).toHaveLength(2);
   });
 
+  it("clamps an authored status above agreed to agreed (TRL-CORE-005)", async () => {
+    // A source file must not be able to birth a `verified` assertion with no
+    // supporting fact; ingestion clamps it to `agreed`.
+    const src = spec(A("T-X-001", "verified", "born verified in the file"));
+    const r = await ingestSpec(projectId, "core", src, "cv");
+    expect(r.ok).toBe(true);
+    const row = (await db.select().from(assertions).where(eq(assertions.projectId, projectId)))[0]!;
+    expect(row.status).toBe("agreed");
+  });
+
   it("is a no-op when re-ingesting the same commit (TRL-API-014)", async () => {
     const src = spec(A("T-X-001", "agreed", "body"));
     await ingestSpec(projectId, "core", src, "c1");
