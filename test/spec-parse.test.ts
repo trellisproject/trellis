@@ -61,4 +61,22 @@ describe("parseSpec", () => {
     const r = parseSpec(dup);
     expect(r.errors.some((e) => /Duplicate assertion id/.test(e.message))).toBe(true);
   });
+
+  it("recognizes a placeholder id and marks it (TRL-CORE-048/049)", () => {
+    const r = parseSpec(`### TRL-CORE-NEW: Draft\nstatus: proposed\n\nBody.\n`);
+    expect(r.errors).toEqual([]);
+    expect(r.assertions[0]).toMatchObject({ humanId: "TRL-CORE-NEW", placeholder: true });
+  });
+
+  it("does not flag duplicate placeholders", () => {
+    const two = `### T-X-NEW: a\nstatus: proposed\n\nA.\n### T-X-NEW: b\nstatus: proposed\n\nB.\n`;
+    const r = parseSpec(two);
+    expect(r.errors).toEqual([]);
+    expect(r.assertions).toHaveLength(2);
+  });
+
+  it("marks a real id as not a placeholder", () => {
+    const r = parseSpec(SAMPLE);
+    expect(r.assertions[0]!.placeholder).toBe(false);
+  });
 });
