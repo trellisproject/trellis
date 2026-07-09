@@ -21,21 +21,29 @@ export async function createChatInstall(
   input: { provider: ChatProvider; workspaceId: string; channelId?: string | null; captureMode?: "trigger" | "all"; displayName?: string },
 ): Promise<Result<{ install: typeof chatInstalls.$inferSelect; token: string }>> {
   const channelId = input.channelId ?? null;
-  const existing = (
-    await db
-      .select()
-      .from(chatInstalls)
-      .where(
-        and(
-          eq(chatInstalls.provider, input.provider),
-          eq(chatInstalls.workspaceId, input.workspaceId),
-          channelId === null ? isNull(chatInstalls.channelId) : eq(chatInstalls.channelId, channelId),
-        ),
-      )
-  )[0];
+  // A channel maps to at most one project globally (TRL-API-020) — so a channel
+  // conflict is checked across all projects, not just this workspace. A
+  // workspace default is unique per workspace.
+  const existing = channelId
+    ? (await db.select().from(chatInstalls).where(and(eq(chatInstalls.provider, input.provider), eq(chatInstalls.channelId, channelId))))[0]
+    : (
+        await db
+          .select()
+          .from(chatInstalls)
+          .where(and(eq(chatInstalls.provider, input.provider), eq(chatInstalls.workspaceId, input.workspaceId), isNull(chatInstalls.channelId)))
+      )[0];
   if (existing) {
-    const where = channelId ? `channel ${channelId}` : "workspace default";
-    return { ok: false, code: "INSTALL_EXISTS", error: `${input.provider} ${where} is already installed` };
+    if (channelId) {
+      const sameProject = existing.projectId === projectId;
+      return {
+        ok: false,
+        code: "CHANNEL_TAKEN",
+        error: sameProject
+          ? `${input.provider} channel ${channelId} is already routed in this project`
+          : `${input.provider} channel ${channelId} is already routed to another project`,
+      };
+    }
+    return { ok: false, code: "INSTALL_EXISTS", error: `${input.provider} workspace default is already installed` };
   }
 
   const raw = generateToken();
