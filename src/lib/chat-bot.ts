@@ -47,14 +47,16 @@ export function buildChatCapture(args: {
   text: string;
   author: { userId?: string; fullName?: string };
   raw: unknown;
-}): { provider: ChatProvider; workspaceId: string; channelId: string | null; title: string; ask: string; asker: string; ref: string } | null {
+}): { provider: ChatProvider; workspaceId: string | null; channelId: string | null; title: string; ask: string; asker: string; ref: string } | null {
   const parts = args.threadId.split(":");
   const provider = parts[0];
   if (provider !== "slack" && provider !== "gchat") return null;
-  const channelId = parts[1] ?? null;
+  const channelId = parts[1] || null;
   const workspaceId = extractWorkspaceId(provider, args.raw);
   const ask = (args.text ?? "").trim();
-  if (!workspaceId || !ask) return null;
+  // Need the ask, and at least one routing key. Workspace can be absent (Slack
+  // reaction events don't carry it) — a channel route resolves without it.
+  if (!ask || (!workspaceId && !channelId)) return null;
   const who = args.author.userId ?? "unknown";
   const asker = `${provider}:${who}${args.author.fullName ? ` (${args.author.fullName})` : ""}`;
   // For a top-level message the thread id already ends with the message id, so
@@ -135,9 +137,29 @@ export function getBot(): BotLike | null {
     });
   });
   bot.onReaction([captureEmoji], async (event) => {
-    if (!event.added || !event.message) return;
-    const m = event.message;
-    await captureFromMessage({ threadId: m.threadId, id: m.id, text: m.text, author: m.author, raw: m.raw });
+    if (!event.added) return;
+    // Slack reaction events carry no message body — only a ref — so fetch the
+    // reacted message. Its author is the asker; the reactor is the curator.
+    let m = event.message;
+    if (!m && typeof event.adapter?.fetchMessage === "function") {
+      try {
+        m = await event.adapter.fetchMessage(event.threadId, event.messageId);
+      } catch (e) {
+        console.error("[chat] reaction fetchMessage failed", e);
+        return;
+      }
+    }
+    if (!m) {
+      console.log("[chat] reaction ignored (message not resolvable)", { thread: event.threadId });
+      return;
+    }
+    await captureFromMessage({
+      threadId: m.threadId ?? event.threadId,
+      id: m.id ?? event.messageId,
+      text: m.text,
+      author: m.author,
+      raw: m.raw,
+    });
   });
 
   botMemo = bot;

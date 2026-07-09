@@ -134,4 +134,11 @@ describe("chat installs — per-channel routing (TRL-API-019)", () => {
     const dup = await createChatInstall(projectId, { provider: "slack", workspaceId: "T1", channelId: "C1" });
     expect(dup.ok).toBe(false);
   });
+
+  it("resolves a channel route without a workspace id (Slack reaction path)", async () => {
+    const { projectId: projB } = await makeProject("proj-b");
+    await createChatInstall(projB, { provider: "slack", workspaceId: "T1", channelId: "C_X" });
+    const r = await resolveInstall("slack", null, "C_X"); // no workspace, as reactions arrive
+    expect(r?.projectId).toBe(projB);
+  });
 });

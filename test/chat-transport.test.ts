@@ -48,15 +48,18 @@ describe("chat transport — event mapping (buildChatCapture)", () => {
     expect(cap?.asker).toBe("gchat:users/9 (Sam)");
   });
 
-  it("returns null when the workspace can't be resolved", () => {
-    expect(
-      buildChatCapture({ threadId: "slack:C1:T1", messageId: "1", text: "hi", author: { userId: "U1" }, raw: {} }),
-    ).toBeNull();
+  it("captures with a null workspace when only a channel is present (reaction path)", () => {
+    // Slack reactions carry no team id; a channel route still resolves.
+    const cap = buildChatCapture({ threadId: "slack:C1:T1", messageId: "1", text: "hi", author: { userId: "U1" }, raw: {} });
+    expect(cap).not.toBeNull();
+    expect(cap?.workspaceId).toBeNull();
+    expect(cap?.channelId).toBe("C1");
   });
 
-  it("returns null for a non-chat thread id or empty text", () => {
+  it("returns null for a non-chat thread, empty text, or no routing key", () => {
     expect(buildChatCapture({ threadId: "github:x:y", messageId: "1", text: "hi", author: {}, raw: { team_id: "T" } })).toBeNull();
     expect(buildChatCapture({ threadId: "slack:C1:T1", messageId: "1", text: "   ", author: { userId: "U1" }, raw: { team_id: "T" } })).toBeNull();
+    expect(buildChatCapture({ threadId: "slack", messageId: "1", text: "hi", author: {}, raw: {} })).toBeNull(); // no channel, no workspace
   });
 
   it("extractWorkspaceId reads the known raw fields per provider", () => {
