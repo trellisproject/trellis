@@ -55,17 +55,21 @@ export async function createChatInstall(
 }
 
 // Resolve an inbound event to its install: a channel-specific route wins, then
-// the workspace default (channel_id NULL), else null (TRL-API-019).
-export async function resolveInstall(provider: ChatProvider, workspaceId: string, channelId?: string | null) {
+// the workspace default (channel_id NULL), else null (TRL-API-019). A channel
+// route matches by (provider, channel) without the workspace, since chat
+// channel ids are globally unique — and some events (Slack reactions) don't
+// carry a workspace id at all.
+export async function resolveInstall(provider: ChatProvider, workspaceId?: string | null, channelId?: string | null) {
   if (channelId) {
     const specific = (
       await db
         .select()
         .from(chatInstalls)
-        .where(and(eq(chatInstalls.provider, provider), eq(chatInstalls.workspaceId, workspaceId), eq(chatInstalls.channelId, channelId)))
+        .where(and(eq(chatInstalls.provider, provider), eq(chatInstalls.channelId, channelId)))
     )[0];
     if (specific) return specific;
   }
+  if (!workspaceId) return null;
   return (
     (
       await db
@@ -98,14 +102,14 @@ export async function listChatInstalls(projectId: string) {
 // platform webhook handlers call.
 export async function captureFromChat(input: {
   provider: ChatProvider;
-  workspaceId: string;
+  workspaceId?: string | null;
   channelId?: string | null; // routes to a channel-specific install when set
   title: string;
   ask: string; // verbatim message text
   asker: string; // external identity, e.g. "slack:U024 (dana)"
   ref: string; // permalink / message id — the trace back to the origin
 }): Promise<Result<{ requestId: string; projectId: string }>> {
-  const install = await resolveInstall(input.provider, input.workspaceId, input.channelId ?? null);
+  const install = await resolveInstall(input.provider, input.workspaceId ?? null, input.channelId ?? null);
   if (!install) {
     const where = input.channelId ? `channel ${input.channelId}` : `workspace ${input.workspaceId}`;
     return { ok: false, code: "NO_INSTALL", error: `No route for ${input.provider} ${where}` };
