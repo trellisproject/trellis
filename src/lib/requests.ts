@@ -2,7 +2,7 @@
 // Capture (any member) → accept/decline (a decision) → derive & link
 // assertions → shipped is computed when that intent is verified.
 
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { assertions, decisions, requestAssertions, requests } from "../db/schema.js";
 import { authorizeDecider } from "./decisions.js";
@@ -122,6 +122,42 @@ export async function getRequest(projectId: string, requestId: string): Promise<
   if (!req || req.projectId !== projectId) return null;
   const derived = await derivedFor(requestId);
   return { ...req, derived, shipped: isShipped(derived) };
+}
+
+// Deliver receipts for requests that have shipped (TRL-CORE-045). A sweep, run
+// out of band by an agent/checker, so delivery never blocks the verification
+// that made a request ship (TRL-API-017). Idempotent: receiptDeliveredAt is set
+// once, so re-running never double-posts. `post` is injected (the chat poster)
+// to keep this module free of a dependency on the chat transport.
+export async function deliverPendingReceipts(
+  projectId: string,
+  post: (provider: string, threadId: string, text: string) => Promise<boolean>,
+): Promise<{ delivered: string[] }> {
+  const candidates = await db
+    .select()
+    .from(requests)
+    .where(
+      and(
+        eq(requests.projectId, projectId),
+        inArray(requests.source, ["slack", "gchat"]),
+        isNotNull(requests.sourceRef),
+        isNull(requests.receiptDeliveredAt),
+      ),
+    );
+  const delivered: string[] = [];
+  for (const r of candidates) {
+    const derived = await derivedFor(r.id);
+    if (!isShipped(derived)) continue;
+    const ids = derived
+      .filter((d) => d.status !== "retired")
+      .map((d) => d.humanId)
+      .join(", ");
+    const ok = await post(r.source!, r.sourceRef!, `✅ Shipped: "${r.title}" — verified (${ids}).`);
+    if (!ok) continue;
+    await db.update(requests).set({ receiptDeliveredAt: new Date(), updatedAt: new Date() }).where(eq(requests.id, r.id));
+    delivered.push(r.id);
+  }
+  return { delivered };
 }
 
 export async function listRequests(projectId: string, status?: string): Promise<RequestView[]> {

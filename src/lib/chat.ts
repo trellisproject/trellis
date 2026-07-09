@@ -5,7 +5,7 @@
 
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { db } from "../db/index.js";
-import { agentTokens, chatInstalls, memberships, principals } from "../db/schema.js";
+import { agentTokens, chatInstalls, memberships, principals, requests } from "../db/schema.js";
 import { generateToken, hashToken } from "./tokens.js";
 import { createRequest } from "./requests.js";
 
@@ -18,7 +18,7 @@ export type ChatProvider = "slack" | "gchat";
 // any minted token — TRL-API-001/015).
 export async function createChatInstall(
   projectId: string,
-  input: { provider: ChatProvider; workspaceId: string; channelId?: string | null; displayName?: string },
+  input: { provider: ChatProvider; workspaceId: string; channelId?: string | null; captureMode?: "trigger" | "all"; displayName?: string },
 ): Promise<Result<{ install: typeof chatInstalls.$inferSelect; token: string }>> {
   const channelId = input.channelId ?? null;
   const existing = (
@@ -47,7 +47,14 @@ export async function createChatInstall(
     return (
       await tx
         .insert(chatInstalls)
-        .values({ projectId, provider: input.provider, workspaceId: input.workspaceId, channelId, capturePrincipalId: p.id })
+        .values({
+          projectId,
+          provider: input.provider,
+          workspaceId: input.workspaceId,
+          channelId,
+          captureMode: input.captureMode ?? "trigger",
+          capturePrincipalId: p.id,
+        })
         .returning()
     )[0]!;
   });
@@ -87,6 +94,7 @@ export async function listChatInstalls(projectId: string) {
       provider: chatInstalls.provider,
       workspaceId: chatInstalls.workspaceId,
       channelId: chatInstalls.channelId,
+      captureMode: chatInstalls.captureMode,
       capturePrincipalId: chatInstalls.capturePrincipalId,
       createdAt: chatInstalls.createdAt,
     })
@@ -117,6 +125,19 @@ export async function captureFromChat(input: {
   if (!input.ask.trim() || !input.ref.trim()) {
     return { ok: false, code: "INCOMPLETE_SOURCE", error: "A chat capture requires a verbatim ask and a source ref" };
   }
+  // Idempotency: one chat message yields one request. source_ref identifies the
+  // origin, so a Slack retry (we were slow to ack) or reacting to a message that
+  // was already captured (e.g. your own @-mention) returns the existing request
+  // rather than duplicating it. Cheaper and more targeted than shared dedupe
+  // state; the bot runs on in-memory state deliberately.
+  const existing = (
+    await db
+      .select({ id: requests.id })
+      .from(requests)
+      .where(and(eq(requests.projectId, install.projectId), eq(requests.source, input.provider), eq(requests.sourceRef, input.ref)))
+  )[0];
+  if (existing) return { ok: true, value: { requestId: existing.id, projectId: install.projectId } };
+
   const req = await createRequest(install.projectId, {
     title: input.title.trim() || input.ask.slice(0, 80),
     body: input.ask,

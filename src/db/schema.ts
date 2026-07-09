@@ -434,6 +434,9 @@ export const requests = pgTable("requests", {
   status: text("status").$type<"new" | "accepted" | "declined">().notNull().default("new"),
   priority: text("priority").$type<"now" | "normal" | "later">().notNull().default("normal"),
   decisionId: text("decision_id"), // the accept/decline decision
+  // When a shipped-request receipt was delivered to its origin (TRL-CORE-045).
+  // Set once, so a receipt is never delivered twice.
+  receiptDeliveredAt: timestamp("receipt_delivered_at", { withTimezone: true }),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
@@ -467,6 +470,10 @@ export const chatInstalls = pgTable(
     // (applies to any channel with no specific route). A channel-specific route
     // wins over the default (TRL-API-019).
     channelId: text("channel_id"),
+    // How this route captures: "trigger" = only @-mentions and 📥 reactions;
+    // "all" = every top-level message in the channel (a dedicated requests
+    // channel). Default trigger. (TRL-API-019)
+    captureMode: text("capture_mode").$type<"trigger" | "all">().notNull().default("trigger"),
     capturePrincipalId: text("capture_principal_id")
       .references(() => principals.id)
       .notNull(),

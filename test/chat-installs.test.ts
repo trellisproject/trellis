@@ -141,4 +141,22 @@ describe("chat installs — per-channel routing (TRL-API-019)", () => {
     const r = await resolveInstall("slack", null, "C_X"); // no workspace, as reactions arrive
     expect(r?.projectId).toBe(projB);
   });
+
+  it("records capture mode (default trigger; all for a dedicated channel)", async () => {
+    await createChatInstall(projectId, { provider: "slack", workspaceId: "T1", channelId: "C_DEF" });
+    await createChatInstall(projectId, { provider: "slack", workspaceId: "T1", channelId: "C_ALL", captureMode: "all" });
+    expect((await resolveInstall("slack", "T1", "C_DEF"))?.captureMode).toBe("trigger");
+    expect((await resolveInstall("slack", "T1", "C_ALL"))?.captureMode).toBe("all");
+  });
+
+  it("is idempotent on source_ref — a retried or re-reacted message captures once", async () => {
+    await createChatInstall(projectId, { provider: "slack", workspaceId: "T1", channelId: "C1" });
+    const args = { provider: "slack" as const, workspaceId: "T1", channelId: "C1", title: "x", ask: "add export", asker: "slack:U1", ref: "slack:C1:1783600000.1" };
+    const a = await captureFromChat(args);
+    const b = await captureFromChat(args); // same source_ref
+    expect(a.ok && b.ok).toBe(true);
+    if (a.ok && b.ok) expect(a.value.requestId).toBe(b.value.requestId); // same request, not a duplicate
+    const rows = await db.select().from(requests).where(eq(requests.projectId, projectId));
+    expect(rows).toHaveLength(1);
+  });
 });

@@ -1,0 +1,1 @@
+ALTER TABLE "chat_installs" ADD COLUMN "capture_mode" text DEFAULT 'trigger' NOT NULL;
