@@ -370,12 +370,19 @@ async function cmdEffort(cfg, positional, flags) {
   const token = await resolveToken(cfg, { name: flags.name });
   const P = cfg.project;
   const sub = positional[1];
+  if (sub === "show") {
+    const id = positional[2];
+    if (!id) fail("usage: trellis effort show <id>");
+    return printEffortDetail(await api(cfg, "GET", `/projects/${P}/efforts/${id}`, null, token));
+  }
   if (sub === "update") {
     const id = positional[2];
-    if (!id) fail('usage: trellis effort update <id> [--status s --owner ID --title T --goal g --target T] [--date YYYY-MM-DD --why R] [--commitment|--no-commitment] [--add HUMANID --why R] [--remove HUMANID --why R]');
+    if (!id) fail('usage: trellis effort update <id> [--status s --owner ID --title T --goal g --target T --desc T] [--date YYYY-MM-DD --why R] [--commitment|--no-commitment] [--add HUMANID --why R] [--remove HUMANID --why R]');
     const body = {};
     if (typeof flags.status === "string") body.status = flags.status;
     if (typeof flags.title === "string") body.title = flags.title;
+    if (typeof flags.desc === "string") body.description = flags.desc;
+    if (typeof flags.description === "string") body.description = flags.description;
     if (typeof flags.goal === "string") body.goal_type = flags.goal;
     if (flags.target !== undefined) body.goal_target = flags.target === true ? null : flags.target;
     if (flags.owner !== undefined) body.owner_id = flags.owner === true ? null : flags.owner;
@@ -385,20 +392,40 @@ async function cmdEffort(cfg, positional, flags) {
     if (flags.add) body.add_assertions = [].concat(flags.add);
     if (flags.remove) body.remove_assertions = [].concat(flags.remove);
     if (typeof flags.why === "string") body.rationale = flags.why;
-    if (Object.keys(body).length === 0) fail("nothing to update — pass --status/--owner/--title/--goal/--target/--date/--commitment/--add/--remove");
+    if (Object.keys(body).length === 0) fail("nothing to update — pass --status/--owner/--title/--desc/--goal/--target/--date/--commitment/--add/--remove");
     await api(cfg, "PATCH", `/projects/${P}/efforts/${id}`, body, token);
     return console.log(`updated effort ${id.slice(0, 8)}`);
   }
   const title = (sub === "new" ? positional.slice(2) : positional.slice(1)).join(" ").trim() || (typeof flags.title === "string" ? flags.title : "");
-  if (!title) fail('usage: trellis effort new "<title>" [--status s --owner ID --goal checklist|metric|open --target T --date YYYY-MM-DD --commitment --assertion HUMANID ...]');
+  if (!title) fail('usage: trellis effort new "<title>" [--desc T --status s --owner ID --goal checklist|metric|open --target T --date YYYY-MM-DD --commitment --assertion HUMANID ...]');
   const body = {
     title, status: typeof flags.status === "string" ? flags.status : undefined,
+    description: typeof flags.desc === "string" ? flags.desc : typeof flags.description === "string" ? flags.description : undefined,
     goal_type: typeof flags.goal === "string" ? flags.goal : undefined, goal_target: typeof flags.target === "string" ? flags.target : undefined,
     owner_id: typeof flags.owner === "string" ? flags.owner : null, target_date: typeof flags.date === "string" ? flags.date : null, commitment: !!flags.commitment,
   };
   if (flags.assertion) body.assertions = [].concat(flags.assertion);
   const r = await api(cfg, "POST", `/projects/${P}/efforts`, body, token);
   console.log(`created effort ${r.effort.id}  ${r.effort.title}`);
+}
+
+// Render the effort cockpit: header, description, assertions, tasks, recent decisions.
+function printEffortDetail(d) {
+  const e = d.effort;
+  const goal = e.goalType === "metric" ? "metric" : e.goalType === "open" ? "open-ended" : "checklist";
+  const owner = e.ownerName ? `  @${e.ownerName}` : "";
+  const date = e.targetDate ? `  (target ${e.targetDate}${e.dueSoon ? `, due ${e.dueInDays}d` : ""})` : "";
+  const commit = e.commitment ? "  ⚑ committed" : "";
+  console.log(`${e.title}  [${e.status}]${owner}${date}${commit}`);
+  console.log(`goal: ${goal}${e.goalTarget ? ` (${e.goalTarget})` : ""}  ·  progress ${e.progress.verified}/${e.progress.total}`);
+  if (e.description) console.log(`\n${e.description}`);
+  const asserts = d.assertions ?? [];
+  console.log(`\nassertions (${asserts.length}):`);
+  for (const a of asserts) console.log(`  ${a.humanId}  [${a.status}]  ${a.title}${a.latestValue != null ? `  = ${a.latestValue}` : ""}`);
+  const tasks = d.tasks ?? [];
+  if (tasks.length) { console.log(`\ntasks (${tasks.length}):`); for (const t of tasks) console.log(`  [${t.status}] ${t.priority ? `(${t.priority}) ` : ""}${t.title}${t.ownerName ? `  @${t.ownerName}` : ""}`); }
+  const decisions = d.decisions ?? [];
+  if (decisions.length) { console.log(`\nrecent decisions (${decisions.length}):`); for (const dec of decisions.slice(0, 5)) console.log(`  ${dec.choice} — ${(dec.rationale || "").slice(0, 80)}`); }
 }
 
 // The Map — hierarchical, spec-anchored flow diagrams (agent-authorable).
@@ -496,8 +523,9 @@ const HELP = `trellis — report reality to a Trellis project
   trellis retire <humanId> --why R     retire an assertion
   trellis drifts                       open drifts (the Decide bucket)
   trellis resolve <driftId> --amend|--fix|--accept --why R
-  trellis effort new "<title>" [--status s --owner ID --goal g --target T --date YYYY-MM-DD --commitment --assertion HUMANID]
-  trellis effort update <id> [--status --owner --title --goal --target] [--date D --why R] [--commitment|--no-commitment] [--add/--remove HUMANID --why R]
+  trellis effort new "<title>" [--desc T --status s --owner ID --goal g --target T --date YYYY-MM-DD --commitment --assertion HUMANID]
+  trellis effort update <id> [--status --owner --title --desc --goal --target] [--date D --why R] [--commitment|--no-commitment] [--add/--remove HUMANID --why R]
+  trellis effort show <id>             effort detail — description, assertions, tasks, decisions
   trellis efforts                      list efforts (roadmap)
   trellis task "<title>" [--effort ID] [--owner ID] [--assertion HUMANID] [--desc T] [--priority now|normal|later]
   trellis task update <id> [--status s] [--owner ID] [--effort ID] [--priority p] [--title T] [--desc T]
