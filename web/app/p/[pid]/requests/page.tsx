@@ -12,6 +12,8 @@ export default function Requests({ params }: { params: Promise<{ pid: string }> 
   const [creating, setCreating] = useState(false);
   const [decide, setDecide] = useState<Request | null>(null);
   const [linking, setLinking] = useState<Request | null>(null);
+  const [filter, setFilter] = useState<"all" | "open" | "new" | "accepted" | "shipped" | "declined">("all");
+  const [sort, setSort] = useState<"open-first" | "newest">("open-first");
 
   async function load() {
     const d = await api.get<{ requests: Request[] }>(`/projects/${pid}/requests`);
@@ -27,6 +29,31 @@ export default function Requests({ params }: { params: Promise<{ pid: string }> 
     return <span className="badge">new</span>;
   }
 
+  // Effective state, folding the computed `shipped` flag over the stored status.
+  function state(r: Request): "new" | "accepted" | "shipped" | "declined" {
+    return r.shipped ? "shipped" : r.status;
+  }
+  // Open = still needs someone; resolved sinks below it (shipped or declined).
+  function isOpen(r: Request) {
+    return state(r) === "new" || state(r) === "accepted";
+  }
+
+  // API returns newest-first (createdAt desc); Array.sort is stable, so an
+  // open-first sort keeps that recency order within each group.
+  const view = requests
+    .filter((r) => filter === "all" || (filter === "open" ? isOpen(r) : state(r) === filter))
+    .slice()
+    .sort((a, b) => (sort === "newest" ? 0 : Number(isOpen(b)) - Number(isOpen(a))));
+
+  const FILTERS: { key: typeof filter; label: string }[] = [
+    { key: "all", label: "All" },
+    { key: "open", label: "Open" },
+    { key: "new", label: "New" },
+    { key: "accepted", label: "Accepted" },
+    { key: "shipped", label: "Shipped" },
+    { key: "declined", label: "Declined" },
+  ];
+
   return (
     <>
       <div className="topbar">
@@ -35,9 +62,25 @@ export default function Requests({ params }: { params: Promise<{ pid: string }> 
         <button className="btn" style={{ marginLeft: "auto" }} onClick={() => setCreating(true)}>+ New request</button>
       </div>
       <div className="content">
+        {!loading && requests.length > 0 && (
+          <div className="between" style={{ marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+            <div className="flex" style={{ flexWrap: "wrap", gap: 6 }}>
+              {FILTERS.map((f) => (
+                <button key={f.key} className={`btn ${filter === f.key ? "primary" : "ghost"}`} onClick={() => setFilter(f.key)}>{f.label}</button>
+              ))}
+            </div>
+            <div className="flex" style={{ gap: 6, alignItems: "center" }}>
+              <span className="mutedtext" style={{ fontSize: 13 }}>Sort</span>
+              <button className={`btn ${sort === "open-first" ? "primary" : "ghost"}`} onClick={() => setSort("open-first")}>Open first</button>
+              <button className={`btn ${sort === "newest" ? "primary" : "ghost"}`} onClick={() => setSort("newest")}>Newest</button>
+            </div>
+          </div>
+        )}
         {loading ? <div className="empty">Loading…</div> : requests.length === 0 ? (
           <div className="card"><div className="empty">No requests yet. Capture the first ask.</div></div>
-        ) : requests.map((r) => (
+        ) : view.length === 0 ? (
+          <div className="card"><div className="empty">No requests match this filter.</div></div>
+        ) : view.map((r) => (
           <div key={r.id} className="card">
             <div className="row">
               <div className="between">
