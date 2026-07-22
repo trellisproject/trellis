@@ -26,6 +26,29 @@ async function isMember(projectId: string, principalId: string): Promise<boolean
   return m.length > 0;
 }
 
+// Resolve assertion links by human id, enforcing buildability (TRL-CORE-014,
+// TRL-CORE-006): agents build only against agreed intent, so a `proposed` (not
+// yet reviewed) or `retired` assertion is not buildable and can't anchor a
+// task. Unknown human ids are rejected. Returns internal ids in input order.
+async function resolveBuildableAssertions(
+  projectId: string,
+  humanIds: string[],
+): Promise<Result<string[]>> {
+  if (!humanIds.length) return { ok: true, value: [] };
+  const rows = await db
+    .select()
+    .from(assertions)
+    .where(and(eq(assertions.projectId, projectId), inArray(assertions.humanId, humanIds)));
+  const map = new Map(rows.map((r) => [r.humanId, r.id]));
+  const missing = humanIds.filter((h) => !map.has(h));
+  if (missing.length) return { ok: false, code: "UNKNOWN_ASSERTION", error: `Unknown: ${missing.join(", ")}` };
+  const notBuildable = rows.filter((r) => r.status === "proposed" || r.status === "retired");
+  if (notBuildable.length) {
+    return { ok: false, code: "ASSERTION_NOT_BUILDABLE", error: `Not buildable (${notBuildable.map((r) => `${r.humanId}:${r.status}`).join(", ")})` };
+  }
+  return { ok: true, value: humanIds.map((h) => map.get(h)!) };
+}
+
 export async function createTask(
   projectId: string,
   input: { title: string; description?: string; assertions?: string[]; driftId?: string | null; dependsOn?: string[]; effortId?: string | null; ownerId?: string | null; priority?: "now" | "normal" | "later" },
@@ -33,20 +56,9 @@ export async function createTask(
   // resolve assertion links by human id (TRL-CORE-014)
   let assertionIds: string[] = [];
   if (input.assertions?.length) {
-    const rows = await db
-      .select()
-      .from(assertions)
-      .where(and(eq(assertions.projectId, projectId), inArray(assertions.humanId, input.assertions)));
-    const map = new Map(rows.map((r) => [r.humanId, r.id]));
-    const missing = input.assertions.filter((h) => !map.has(h));
-    if (missing.length) return { ok: false, code: "UNKNOWN_ASSERTION", error: `Unknown: ${missing.join(", ")}` };
-    // TRL-CORE-006: agents build only against agreed intent — a `proposed` (not
-    // yet reviewed) or `retired` assertion is not buildable, so it can't anchor a task.
-    const notBuildable = rows.filter((r) => r.status === "proposed" || r.status === "retired");
-    if (notBuildable.length) {
-      return { ok: false, code: "ASSERTION_NOT_BUILDABLE", error: `Not buildable (${notBuildable.map((r) => `${r.humanId}:${r.status}`).join(", ")})` };
-    }
-    assertionIds = input.assertions.map((h) => map.get(h)!);
+    const res = await resolveBuildableAssertions(projectId, input.assertions);
+    if (!res.ok) return res;
+    assertionIds = res.value;
   }
   if (input.driftId) {
     const d = (await db.select().from(drifts).where(eq(drifts.id, input.driftId)))[0];
@@ -130,7 +142,7 @@ export async function handoffTask(
 export async function updateTaskStatus(
   projectId: string,
   taskId: string,
-  input: { status?: TaskStatus; title?: string; description?: string; priority?: "now" | "normal" | "later"; ownerId?: string | null; effortId?: string | null; version?: number },
+  input: { status?: TaskStatus; title?: string; description?: string; priority?: "now" | "normal" | "later"; ownerId?: string | null; effortId?: string | null; assertions?: string[]; version?: number },
 ): Promise<Result<typeof tasks.$inferSelect>> {
   const task = (await db.select().from(tasks).where(eq(tasks.id, taskId)))[0];
   if (!task || task.projectId !== projectId) return { ok: false, code: "NOT_FOUND", error: "Task not found" };
@@ -138,22 +150,38 @@ export async function updateTaskStatus(
   if (input.version !== undefined && input.version !== task.version) {
     return { ok: false, code: "STALE_VERSION", error: "Task was modified since last read" };
   }
-  const updated = (
-    await db
-      .update(tasks)
-      .set({
-        status: input.status ?? task.status,
-        title: input.title ?? task.title,
-        description: input.description ?? task.description,
-        priority: input.priority ?? task.priority,
-        ownerId: input.ownerId !== undefined ? input.ownerId : task.ownerId,
-        effortId: input.effortId !== undefined ? input.effortId : task.effortId,
-        version: task.version + 1,
-        updatedAt: new Date(),
-      })
-      .where(eq(tasks.id, taskId))
-      .returning()
-  )[0]!;
+  // TRL-CORE-054: assertion links are editable after creation. When provided,
+  // the array replaces the full set (an empty array clears all links); when
+  // omitted, links are left untouched. Same buildability rule as creation.
+  let newAssertionIds: string[] | null = null;
+  if (input.assertions !== undefined) {
+    const res = await resolveBuildableAssertions(projectId, input.assertions);
+    if (!res.ok) return res;
+    newAssertionIds = res.value;
+  }
+  const updated = await db.transaction(async (tx) => {
+    const u = (
+      await tx
+        .update(tasks)
+        .set({
+          status: input.status ?? task.status,
+          title: input.title ?? task.title,
+          description: input.description ?? task.description,
+          priority: input.priority ?? task.priority,
+          ownerId: input.ownerId !== undefined ? input.ownerId : task.ownerId,
+          effortId: input.effortId !== undefined ? input.effortId : task.effortId,
+          version: task.version + 1,
+          updatedAt: new Date(),
+        })
+        .where(eq(tasks.id, taskId))
+        .returning()
+    )[0]!;
+    if (newAssertionIds !== null) {
+      await tx.delete(taskAssertions).where(eq(taskAssertions.taskId, taskId));
+      for (const aid of newAssertionIds) await tx.insert(taskAssertions).values({ taskId, assertionId: aid });
+    }
+    return u;
+  });
   return { ok: true, value: updated };
 }
 

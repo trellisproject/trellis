@@ -19,6 +19,7 @@ export const taskRoutes = new Hono<AppEnv>();
 const ERR: Record<string, number> = {
   NOT_FOUND: 404,
   UNKNOWN_ASSERTION: 422,
+  ASSERTION_NOT_BUILDABLE: 422,
   UNKNOWN_DRIFT: 422,
   CONFLICT: 409,
   ALREADY_CLAIMED: 409,
@@ -121,11 +122,12 @@ taskRoutes.patch("/projects/:pid/tasks/:tid", async (c) => {
       priority: z.enum(["now", "normal", "later"]).optional(),
       owner_id: z.string().nullable().optional(),
       effort_id: z.string().nullable().optional(),
+      assertions: z.array(z.string()).optional(),
       version: z.number().int().optional(),
     })
     .safeParse(await c.req.json().catch(() => null));
   if (!body.success) return c.json({ error: "Invalid body", code: "INVALID_INPUT" }, 422);
-  const r = await updateTaskStatus(c.req.param("pid"), c.req.param("tid"), { status: body.data.status, title: body.data.title, description: body.data.description, priority: body.data.priority, ownerId: body.data.owner_id, effortId: body.data.effort_id, version: body.data.version });
+  const r = await updateTaskStatus(c.req.param("pid"), c.req.param("tid"), { status: body.data.status, title: body.data.title, description: body.data.description, priority: body.data.priority, ownerId: body.data.owner_id, effortId: body.data.effort_id, assertions: body.data.assertions, version: body.data.version });
   if (!r.ok) return c.json({ error: r.error, code: r.code }, status(r.code));
   return c.json({ task: r.value });
 });

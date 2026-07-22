@@ -52,6 +52,42 @@ describe("tasks", () => {
     if (!r.ok) expect(r.code).toBe("ASSERTION_NOT_BUILDABLE");
   });
 
+  it("edits assertion links after creation, replacing the set (TRL-CORE-054)", async () => {
+    await ingestSpec(projectId, "core", `---\nspec: T-X\ntitle: T\n---\n### T-X-001: t\nstatus: agreed\n\nbody\n### T-X-003: t3\nstatus: agreed\n\nbody\n`, "c3");
+    const t = await mkTask("relink me", { title: "", assertions: ["T-X-001"] });
+    const r = await updateTaskStatus(projectId, t.id, { assertions: ["T-X-003"] });
+    expect(r.ok).toBe(true);
+    const full = await getTask(projectId, t.id);
+    expect(full!.assertions.map((a) => a.humanId)).toEqual(["T-X-003"]);
+  });
+
+  it("clears all assertion links when passed an empty array (TRL-CORE-054)", async () => {
+    await seedAssertion("T-X-001");
+    const t = await mkTask("clear me", { title: "", assertions: ["T-X-001"] });
+    const r = await updateTaskStatus(projectId, t.id, { assertions: [] });
+    expect(r.ok).toBe(true);
+    const full = await getTask(projectId, t.id);
+    expect(full!.assertions).toHaveLength(0);
+  });
+
+  it("leaves links untouched when assertions is omitted (TRL-CORE-054)", async () => {
+    await seedAssertion("T-X-001");
+    const t = await mkTask("keep links", { title: "", assertions: ["T-X-001"] });
+    await updateTaskStatus(projectId, t.id, { status: "in_progress" });
+    const full = await getTask(projectId, t.id);
+    expect(full!.assertions.map((a) => a.humanId)).toEqual(["T-X-001"]);
+  });
+
+  it("rejects editing links to a proposed assertion, leaving existing links intact (TRL-CORE-054)", async () => {
+    await ingestSpec(projectId, "core", `---\nspec: T-X\ntitle: T\n---\n### T-X-001: t\nstatus: agreed\n\nbody\n### T-X-004: t4\nstatus: proposed\n\nbody\n`, "c4");
+    const t = await mkTask("guarded", { title: "", assertions: ["T-X-001"] });
+    const r = await updateTaskStatus(projectId, t.id, { assertions: ["T-X-004"] });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe("ASSERTION_NOT_BUILDABLE");
+    const full = await getTask(projectId, t.id);
+    expect(full!.assertions.map((a) => a.humanId)).toEqual(["T-X-001"]); // unchanged
+  });
+
   it("claim sets owner and moves open -> claimed", async () => {
     const t = await mkTask();
     const r = await claimTask(projectId, t.id, operatorId);
