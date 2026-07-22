@@ -173,4 +173,49 @@ describe("cli adapter (TRL-CORE-017)", () => {
     expect(r.code).toBe(1);
     expect(r.stderr).toMatch(/url and project|must include/i);
   });
+
+  it("effort new --desc sets a description that effort show renders", async () => {
+    const { projectId, operatorToken } = await bootstrap();
+    const dir = mkdir();
+    writeConfig(dir, projectId);
+    const env = { TRELLIS_TOKEN: operatorToken };
+    const create = await runCli(
+      ["effort", "new", "Legacy Migration", "--desc", "Move the legacy book into SuperKey", "--goal", "checklist"],
+      { cwd: dir, env },
+    );
+    expect(create.code).toBe(0);
+    const id = create.stdout.match(/created effort (\S+)/)?.[1];
+    expect(id).toBeTruthy();
+    const show = await runCli(["effort", "show", id!], { cwd: dir, env });
+    expect(show.code).toBe(0);
+    expect(show.stdout).toContain("Legacy Migration");
+    expect(show.stdout).toContain("Move the legacy book into SuperKey");
+    expect(show.stdout).toMatch(/goal: checklist/);
+  });
+
+  it("effort update --desc changes the description", async () => {
+    const { projectId, operatorToken } = await bootstrap();
+    const dir = mkdir();
+    writeConfig(dir, projectId);
+    const env = { TRELLIS_TOKEN: operatorToken };
+    const create = await runCli(["effort", "new", "E", "--goal", "open"], { cwd: dir, env });
+    const id = create.stdout.match(/created effort (\S+)/)?.[1]!;
+    const upd = await runCli(["effort", "update", id, "--desc", "Revised scope statement"], { cwd: dir, env });
+    expect(upd.code).toBe(0);
+    const show = await runCli(["effort", "show", id], { cwd: dir, env });
+    expect(show.stdout).toContain("Revised scope statement");
+  });
+
+  it("effort show lists the effort's assertions", async () => {
+    const { projectId, operatorToken } = await bootstrap();
+    await ingestSpec(projectId, "core", spec("T-X-001", "agreed"), "c1");
+    const dir = mkdir();
+    writeConfig(dir, projectId);
+    const env = { TRELLIS_TOKEN: operatorToken };
+    const create = await runCli(["effort", "new", "Anchored", "--assertion", "T-X-001"], { cwd: dir, env });
+    const id = create.stdout.match(/created effort (\S+)/)?.[1]!;
+    const show = await runCli(["effort", "show", id], { cwd: dir, env });
+    expect(show.code).toBe(0);
+    expect(show.stdout).toContain("T-X-001");
+  });
 });
