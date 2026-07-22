@@ -316,7 +316,7 @@ async function cmdMembers(cfg) {
 
 // Tasks — create, and drive an existing one:
 //   trellis task "<title>" [--effort ID --owner ID --assertion HUMANID --desc T --priority P]
-//   trellis task update <id> [--status --owner --effort --priority --title --desc]
+//   trellis task update <id> [--status --owner --effort --priority --title --desc --assertion HUMANID]
 //   trellis task done|claim <id>   ·   task checkpoint <id> --note "..."   ·   task handoff <id> --to <principalId>
 async function cmdTask(cfg, positional, flags) {
   const token = await resolveToken(cfg, { name: flags.name });
@@ -339,7 +339,8 @@ async function cmdTask(cfg, positional, flags) {
     if (typeof flags.priority === "string") body.priority = flags.priority;
     if (flags.owner !== undefined) body.owner_id = flags.owner === true ? null : flags.owner;
     if (flags.effort !== undefined) body.effort_id = flags.effort === true ? null : flags.effort;
-    if (Object.keys(body).length === 0) fail("nothing to update — pass --status/--owner/--effort/--priority/--title/--desc");
+    if (flags.assertion) body.assertions = [].concat(flags.assertion); // TRL-CORE-054: replaces the full link set
+    if (Object.keys(body).length === 0) fail("nothing to update — pass --status/--owner/--effort/--priority/--title/--desc/--assertion");
     const r = await api(cfg, "PATCH", `/projects/${P}/tasks/${id}`, body, token);
     return console.log(`updated ${id.slice(0, 8)} → [${r.task.status}]`);
   }
@@ -528,7 +529,7 @@ const HELP = `trellis — report reality to a Trellis project
   trellis effort show <id>             effort detail — description, assertions, tasks, decisions
   trellis efforts                      list efforts (roadmap)
   trellis task "<title>" [--effort ID] [--owner ID] [--assertion HUMANID] [--desc T] [--priority now|normal|later]
-  trellis task update <id> [--status s] [--owner ID] [--effort ID] [--priority p] [--title T] [--desc T]
+  trellis task update <id> [--status s] [--owner ID] [--effort ID] [--priority p] [--title T] [--desc T] [--assertion HUMANID]
   trellis task done|claim <id>   ·   task checkpoint <id> --note "..."   ·   task handoff <id> --to <principalId>
   trellis tasks [--status open] [--owner ID]   list tasks
   trellis show <humanId>               statement, status, facts, drifts
